@@ -1,0 +1,19 @@
+# Default configuration for pogotrack video processing
+
+N_POGO: 1                # Number of Pogobots expected
+THRESHOLD: 7            # Threshold for binarization
+AREAS: [6000, 7500]      # Min and max contour area
+PERIMETERS: [300, 600]   # Min and max contour perimeter
+CENTER: [1512, 1531]     # Arena center coordinates (pixels)
+RADIUS: 1512             # Arena radius (pixels)
+SEARCH_RANGE: 200        # Max distance for linking trajectories
+CENTROIDS_SIZE: 7        # Circle size for centroid visualization
+ARROW_LENGTH_FRAME: 30   # Arrow length for orientation drawing
+TIP_LENGTH: 0.2          # Arrow tip length ratio
+
+# Conversion parameters
+FPS: 22.46                 # frames per second of the video
+POGOBOT_DIAMETER_CM: 4.975 # actual Pogobot diameter in cm
+PIXEL_DIAMETER: 97.01      # Pogobot diameter in pixels
+
+DEBUG_MODE: True           # To fine tune parameters
