@@ -1,19 +1,30 @@
-# Default configuration for pogotrack video processing
+# === GLOBAL DEBUGGING ===
+DEBUG_PLOTS: True     # If true, debug plotting helpers (e.g., frame visualizations) will run. If false, they no-op.
 
-N_POGO: 1                # Number of Pogobots expected
-THRESHOLD: 7            # Threshold for binarization
-AREAS: [6000, 7500]      # Min and max contour area
-PERIMETERS: [300, 600]   # Min and max contour perimeter
-CENTER: [1512, 1531]     # Arena center coordinates (pixels)
-RADIUS: 1512             # Arena radius (pixels)
-SEARCH_RANGE: 200        # Max distance for linking trajectories
-CENTROIDS_SIZE: 7        # Circle size for centroid visualization
-ARROW_LENGTH_FRAME: 30   # Arrow length for orientation drawing
-TIP_LENGTH: 0.2          # Arrow tip length ratio
+# === VIDEO PROCESSING PARAMETERS ===
+N_POGO: 1              # Expected number of Pogobots in the arena.
+THRESHOLD: 7           # Binarization threshold for foreground segmentation.
+AREAS: [6000, 7500]    # [MIN, MAX] contour area in pixels^2 used to accept detected blobs.
+PERIMETERS: [300, 600] # [MIN, MAX] contour perimeter in pixels used to accept detected blobs.
+CENTER: [1512, 1531]   # Arena center in pixels (X, Y).
+RADIUS: 1512           # Arena radius in pixels for the circular mask.
+SEARCH_RANGE: 200      # Trackpy search range (in pixels) to link detections across frames.
 
-# Conversion parameters
-FPS: 22.46                 # frames per second of the video
-POGOBOT_DIAMETER_CM: 4.975 # actual Pogobot diameter in cm
-PIXEL_DIAMETER: 97.01      # Pogobot diameter in pixels
+# === UNITS CONVERSION / TIMING ===
+FPS: 22.46             # Frames-per-second to convert frame index → time in seconds.
+POGOBOT_DIAMETER_CM: 4.975  # Pogobot physical diameter in centimeters.
+PIXEL_DIAMETER: 97.01       # Pogobot apparent diameter in pixels (calibration).
 
-DEBUG_MODE: True           # To fine tune parameters
+# === PLOTTING PARAMETERS ===
+PLOTTING:
+  CENTROIDS_SIZE: 5           # Radius (in pixels) for centroid markers.
+  ARROW_LENGTH_FRAME: 30      # Arrow length (in pixels) for per-robot direction on frames.
+  TIP_LENGTH: 0.2             # Arrow tip length fraction for OpenCV arrows.
+  ARROW_LENGTH_VIS: 100       # Arrow length (in pixels) for arena visualization.
+  ARENA_RADIUS: 50            # Radius (in pixels) of red circles drawn at each robot position in arena viz.
+  ARENA_XLIM: [0, 2992]       # X-axis limits (pixels) for arena plots.
+  ARENA_YLIM: [0, 2976]       # Y-axis limits (pixels) for arena plots.
+  HEAD_WIDTH: 30              # Arrow head width for arena arrows (matplotlib).
+  HEAD_LENGTH: 30             # Arrow head length for arena arrows (matplotlib).
+  TRAJECTORY_DPI: 300         # DPI for saving trajectory figures.
+  PLOT_TRAJECTORIES: True  # If True, plot_trajectories() will run after tracking

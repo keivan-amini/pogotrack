@@ -5,7 +5,7 @@ import time
 import numpy as np
 from tqdm import tqdm
 
-
+from .plot_helpers import debug_frame, visualize_contours, plot_trajectories
 from .utils import (
     get_difference,
     binarize,
@@ -17,10 +17,9 @@ from .utils import (
     convert_datas,
 )
 
-from .plot_helpers import debug_frame
 
 class VideoProcessor:
-    
+
     DEFAULTS = {
         "N_POGO": 1,
         "THRESHOLD": 7,
@@ -36,9 +35,19 @@ class VideoProcessor:
         "POGOBOT_DIAMETER_CM": 4.975,
         "PIXEL_DIAMETER": 97.01,
         "DEBUG_MODE": True,
+
+        "PLOT_TRAJECTORIES": False,
+        "ARENA_XLIM": [0, 2992],
+        "ARENA_YLIM": [0, 2976],
+        "ARROW_LENGTH_VIS": 100,
+        "ARENA_RADIUS": 50,
+        "HEAD_WIDTH": 30,
+        "HEAD_LENGTH": 30,
+        "TRAJECTORY_DPI": 300,
+        "VISUALIZE_CONTOURS_FRAMES": [],
     }
 
-    def __init__(self, video_path, background_path, save_path, config_path):
+    def __init__(self, video_path, background_path, save_path, config_path, frame_visualize=None):
         """
         Main class for processing Pogobot arena videos and exporting tracking data to CSV.
 
@@ -47,6 +56,7 @@ class VideoProcessor:
             background_path (str): Path to the background image (.bmp).
             save_path (str): Path where the output CSV will be saved.
             config_path (str): Path to YAML configuration file.
+            frame_visualize (int | list[int] | None): Frames for which to visualize contours.
         """
         self.video_path = video_path
         self.background_path = background_path
@@ -54,18 +64,39 @@ class VideoProcessor:
 
         # Load YAML config
         with open(config_path, "r") as f:
-            yaml_config = yaml.safe_load(f)
+            yaml_config = yaml.safe_load(f) or {}
 
-        # Load merged config (defaults → YAML overrides)
+        # Merge defaults → YAML overrides
         self._load_config(yaml_config)
 
-        # DataFrame for results
+        # Normalize frames-to-visualize: merge CLI (if any) with YAML list
+        cli_frames = frame_visualize
+        yaml_frames = self.config.get("VISUALIZE_CONTOURS_FRAMES", [])
+        self.frames_to_visualize = set()
+
+        def _add_frames(fr):
+            if fr is None:
+                return
+            if isinstance(fr, int):
+                self.frames_to_visualize.add(fr)
+            else:
+                try:
+                    for k in fr:
+                        self.frames_to_visualize.add(int(k))
+                except TypeError:
+                    # Not iterable -> ignore
+                    pass
+
+        _add_frames(yaml_frames)
+        _add_frames(cli_frames)
+
+        # Results DF
         self.df = pd.DataFrame(columns=["frame", "x", "y", "theta"])
 
     def _load_config(self, yaml_config: dict):
         """Merge default values with YAML config, YAML has priority."""
-        merged = {**self.DEFAULTS, **yaml_config}  # YAML overwrites defaults
-        self.config = merged  # Store merged config for later direct access
+        merged = {**self.DEFAULTS, **yaml_config}
+        self.config = merged
         for key, value in merged.items():
             setattr(self, key, value)
 
@@ -127,12 +158,13 @@ class VideoProcessor:
                     )
                     if len(thetas) != self.N_POGO:
                         print(f"Frame {n}: Still {len(thetas)} bots detected. Interrupting!")
+                        if self.config.get("DEBUG_MODE", False):
+                            debug_frame(frame_masked, diff, thresh, contours, title=f"Debug frame {n}")
+                        break  # keep as-is per your current behavior
 
-                        # Debug visualization
-                        if self.config["DEBUG_MODE"]:
-                            debug_frame(frame_masked, diff, thresh, contours)
-
-                        break
+                # Visualize contours if requested for this frame index
+                if n in self.frames_to_visualize:
+                    visualize_contours(diff, contours, x, y, thetas, self.config)
 
                 self.df = save_datas(self.df, n, x, y, thetas)
                 n += 1
@@ -140,17 +172,20 @@ class VideoProcessor:
 
         self.video.release()
 
-        # Step 1: Track IDs
+        # Track IDs
         df_tracked = track_objects(self.df, search_range=self.SEARCH_RANGE)
 
-        # Step 2: Convert to seconds/cm using parameters from config
+        # Convert to seconds/cm using params from config
         fps = self.config["FPS"]
         pogobot_diameter_cm = self.config["POGOBOT_DIAMETER_CM"]
         pixel_diameter = self.config["PIXEL_DIAMETER"]
         df_transformed = convert_datas(df_tracked, fps, pogobot_diameter_cm, pixel_diameter)
 
-        # Step 3: Save transformed CSV
+        # Save transformed CSV
         df_transformed.to_csv(self.save_path, index=False)
+
+        # Optional trajectories plot (controlled from YAML)
+        plot_trajectories(self.save_path, "Tracking Results", self.config, bg_path=self.background_path)
 
         end = time.time()
         print(f"Processed {n} frames in {round(end - start, 2)}s → {self.save_path}")
