@@ -66,13 +66,11 @@ def get_angle(frame, i0, j0, R = 30):
     theta = np.arctan2(yi/s - i0, xi/s - j0) * 180 / np.pi
     return theta
 
-def get_all_angles(frame, thresh, contours, x, y, centroids_size = 0, arrow_length_frame = 30, tip_length = 0.2):
+def get_all_angles(thresh, x, y):
     """
     Given two list of centroids x and y and a frame (thresh) matrix,
     operate the function get_angle() for each centroid.
-    After that, optionally, visualize the results.
     """
-    temp = frame.copy()
     thetas = []
     for x0, y0 in zip(x,y):
         theta = get_angle(thresh, i0 = x0, j0 = y0)

@@ -137,12 +137,7 @@ class VideoProcessor:
                 thresh = binarize(diff, threshold=self.THRESHOLD)
                 contours = find_contours(thresh, area_params=self.AREAS, peri_params=self.PERIMETERS)
                 x, y = get_position(contours)
-                thetas = get_all_angles(
-                    frame_masked, thresh, contours, y, x,
-                    centroids_size=self.CENTROIDS_SIZE,
-                    arrow_length_frame=self.ARROW_LENGTH_FRAME,
-                    tip_length=self.TIP_LENGTH
-                )
+                thetas = get_all_angles(thresh, y, x)
 
                 # Fallback if detection count mismatch
                 if len(thetas) != self.N_POGO:
@@ -150,12 +145,8 @@ class VideoProcessor:
 
                     contours = find_contours(thresh, area_params=[1000, 10000], peri_params=[100, 900])
                     x, y = get_position(contours)
-                    thetas = get_all_angles(
-                        frame_masked, thresh, contours, y, x,
-                        centroids_size=self.CENTROIDS_SIZE,
-                        arrow_length_frame=self.ARROW_LENGTH_FRAME,
-                        tip_length=self.TIP_LENGTH
-                    )
+                    thetas = get_all_angles(thresh, y, x)
+
                     if len(thetas) != self.N_POGO:
                         print(f"Frame {n}: Still {len(thetas)} bots detected. Interrupting!")
                         if self.config.get("DEBUG_MODE", False):
