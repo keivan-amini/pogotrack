@@ -1,5 +1,10 @@
+"""
+This module aims at implementing plot functions
+useful to understand, debug and fine-tune pogotrack
+processing parameters contained in config/default.yaml.
+"""
+
 import cv2
-import math
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -7,15 +12,40 @@ import trackpy as tp
 
 
 def visualize_contours(frame, contours, x, y, thetas, cfg):
+
     """
-    Draw centroids + direction arrows on the given frame and show cropped ROIs
-    for each contour. All parameters are read from cfg (YAML-loaded dict).
+    Draw centroids and direction arrows on a given frame
+    and show cropped ROIs for each (pogobot) contour. 
+    All parameters are read from cfg (YAML-loaded dict).
 
     Expected keys in cfg:
       - CENTROIDS_SIZE
       - ARROW_LENGTH_FRAME
       - TIP_LENGTH
+
+    Parameters
+    ----------
+        frame (np.ndarray):
+            frame whose contours are to be displayed.
+        contours (list):
+            list containing  [[i, j]] frame indexes
+            depicting the extracted anulus contours
+            for each pogobot.
+        x (list):
+            list containing x-coordinates of each
+            pogobot in the video, measured in pixel [px].
+        y (list):
+            list containing y-coordinates of each
+            pogobot in the video, measured in pixel [px].
+        thetas (list):
+            list containing the theta angle of each pogobot, 
+            measured in degrees [°]. Here, θ ∈ [-180, 180].
+        cfg (dict):
+            dictionary containing all the processing parameters,
+            contained in config/default.yaml
+    
     """
+
     centroids_size = cfg["CENTROIDS_SIZE"]
     arrow_length_frame = cfg["ARROW_LENGTH_FRAME"]
     tip_length = cfg["TIP_LENGTH"]
@@ -34,30 +64,30 @@ def visualize_contours(frame, contours, x, y, thetas, cfg):
         cv2.arrowedLine(frame_disp, (x0, y0), (x1, y1),
                         (0, 255, 0), 2, tipLength=tip_length)
 
-    # --- Setup subplot grid ---
+    # Subplot grid
     n = len(thetas)
     if n == 0:
         print("No pogobots detected, nothing to plot.")
         return
-    elif n == 1:
+    if n == 1:
         cols, rows = 1, 1
     else:
         cols = min(3, n)
-        rows = math.ceil(n / cols)
+        rows = np.ceil(n / cols)
 
     plt.figure(figsize=(15, 5 * rows))
 
-    # Plot cropped ROIs for each contour
+    # Plot ROIs
     for i, contour in enumerate(contours):
-        mask = np.zeros(frame.shape[:2], dtype=np.uint8)
-        cv2.drawContours(mask, [contour], -1, 255, thickness=-1)
-        roi = cv2.bitwise_and(frame_disp, frame_disp, mask=mask)
+        mask = np.zeros(frame.shape[:2], dtype = np.uint8)
+        cv2.drawContours(mask, [contour], -1, 255, thickness = -1)
+        roi = cv2.bitwise_and(frame_disp, frame_disp, mask = mask)
 
         xb, yb, w, h = cv2.boundingRect(contour)
         cropped = roi[yb:yb + h, xb:xb + w]
 
         plt.subplot(rows, cols, i + 1)
-        plt.imshow(cropped, cmap="gray" if cropped.ndim == 2 else None)
+        plt.imshow(cropped, cmap = "gray" if cropped.ndim == 2 else None)
         plt.title(f"Contour {i+1}")
         plt.axis("off")
 
@@ -66,8 +96,10 @@ def visualize_contours(frame, contours, x, y, thetas, cfg):
 
 
 def visualize_arena(x, y, thetas, cfg):
+
     """
-    Draw simple arena view with small red circles at (x, y) and orientation arrows.
+    Draw simple arena view with small red circles at (x, y)
+    and orientation arrows.
 
     Expected keys in cfg:
       - ARENA_XLIM
@@ -76,7 +108,24 @@ def visualize_arena(x, y, thetas, cfg):
       - ARROW_LENGTH_VIS
       - HEAD_WIDTH
       - HEAD_LENGTH
+
+    Parameters
+    ----------
+        x (list):
+            list containing x-coordinates of each
+            pogobot in the video, measured in pixel [px].
+        y (list):
+            list containing y-coordinates of each
+            pogobot in the video, measured in pixel [px].
+        thetas (list):
+            list containing the theta angle of each pogobot, 
+            measured in degrees [°]. Here, θ ∈ [-180, 180].
+        cfg (dict):
+            dictionary containing all the processing parameters,
+            contained in config/default.yaml
+    
     """
+
     plt.xlabel("x [px]")
     plt.ylabel("y [px]")
     plt.grid(True)
@@ -84,7 +133,7 @@ def visualize_arena(x, y, thetas, cfg):
     plt.ylim(cfg["ARENA_YLIM"])
 
     for xi, yi, thetai in zip(x, y, np.radians(thetas)):
-        circle = plt.Circle((xi, yi), cfg["ARENA_RADIUS"], color="red", fill=True, linewidth=2)
+        circle = plt.Circle((xi, yi), cfg["ARENA_RADIUS"], color = "red", fill = True, linewidth = 2)
         plt.gca().add_patch(circle)
         dx = cfg["ARROW_LENGTH_VIS"] * np.cos(thetai)
         dy = cfg["ARROW_LENGTH_VIS"] * np.sin(thetai)
@@ -99,9 +148,11 @@ def visualize_arena(x, y, thetas, cfg):
     plt.show()
 
 
-def plot_trajectories(csv_path, title, cfg, bg_path=None):
+def plot_trajectories(csv_path, title, cfg, bg_path = None):
+
     """
-    Plot trajectories from CSV (optionally on a background image) if cfg["PLOT_TRAJECTORIES"] is True.
+    Plot trajectories from CSV (optionally on a background image).
+    Runs only if cfg["PLOT_TRAJECTORIES"] is True in config/default.yaml
 
     Expected keys in cfg:
       - PLOT_TRAJECTORIES (bool)
@@ -110,6 +161,28 @@ def plot_trajectories(csv_path, title, cfg, bg_path=None):
       - POGOBOT_DIAMETER_CM
       - PIXEL_DIAMETER
       - FPS
+
+    Parameters
+    ----------
+        csv_path (str):
+            string containing the .csv data file resulted
+            from the pogotrack pipeline. It must contains:
+
+                | frame |  x  |  y  |
+                |-------|-----|-----|
+                |    0  |  78 |  60 |
+                |    1  |  77 |  60 |
+                |   ... | ... | ... |
+            
+        title (str):
+            title of the generated plot.
+        cfg (dict):
+            dictionary containing all the processing parameters,
+            contained in config/default.yaml
+        bg_path (str), optional:
+            path containing the background image, to superimpose
+            the trajectory generated.
+
     """
     
     if cfg.get("PLOT_TRAJECTORIES", False):
@@ -132,7 +205,7 @@ def plot_trajectories(csv_path, title, cfg, bg_path=None):
     if bg_path:
         bg = cv2.imread(bg_path, cv2.IMREAD_GRAYSCALE)
         bg = cv2.flip(bg, 0)
-        tp.plot_traj(df, ax=ax, superimpose=bg)
+        tp.plot_traj(df, ax = ax, superimpose = bg)
     else:
         tp.plot_traj(df, ax=ax)
 
@@ -141,11 +214,31 @@ def plot_trajectories(csv_path, title, cfg, bg_path=None):
     plt.show()
 
 
-def debug_frame(frame_masked, diff, thresh, contours, title=None):
+def debug_frame(frame_masked, diff, thresh, contours, title = None):
+
     """
-    Compact debug view: masked frame, difference, threshold, and contour overlay.
-    This function does not gate itself; call it only when your config says to.
+    Generate a compact debug view, containing frame, difference, 
+    threshold and contour overlay.
+    Runs only if cfg["DEBUG_PLOTS"] is True in config/default.yaml
+
+    Parameters
+    ----------
+        frame_masked (np.ndarray):
+            frame video with a circular black mask
+            outside the experimental arena.
+        diff (ndarray):
+            frame video subtracted with the background.
+        thresh (ndarray):
+            thresholded frame.
+        contours (list):
+            list containing  [[i, j]] frame indexes
+            depicting the extracted anulus contours
+            for each pogobot.
+        title (str), default = None:
+            title of the debugging frame.
+
     """
+
     fm_disp = cv2.cvtColor(frame_masked, cv2.COLOR_BGR2RGB) if frame_masked.ndim == 3 else frame_masked
     diff_disp = cv2.cvtColor(diff, cv2.COLOR_BGR2RGB) if diff.ndim == 3 else diff
     thr_disp = thresh
@@ -157,6 +250,7 @@ def debug_frame(frame_masked, diff, thresh, contours, title=None):
     overlay = cv2.cvtColor(overlay, cv2.COLOR_BGR2RGB)
 
     plt.figure(figsize=(12, 9))
+
     if title:
         plt.suptitle(title)
 
