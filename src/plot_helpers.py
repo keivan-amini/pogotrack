@@ -107,20 +107,27 @@ def plot_trajectories(csv_path, title, cfg, bg_path=None):
       - PLOT_TRAJECTORIES (bool)
       - ARENA_XLIM
       - ARENA_YLIM
-      - TRAJECTORY_DPI (only used if saving with plt.savefig elsewhere)
+      - POGOBOT_DIAMETER_CM
+      - PIXEL_DIAMETER
+      - FPS
     """
-    if not cfg.get("PLOT_TRAJECTORIES", False):
+    
+    if cfg.get("PLOT_TRAJECTORIES", False):
         return
 
     df = pd.read_csv(csv_path)
+    df["frame"] = df["time"] * cfg["FPS"]
+    df["x"] = df["x"] * (cfg["PIXEL_DIAMETER"] / cfg["POGOBOT_DIAMETER_CM"])
+    df["y"] = df["y"] * (cfg["PIXEL_DIAMETER"] / cfg["POGOBOT_DIAMETER_CM"])
 
     _, ax = plt.subplots(figsize=(5, 4))
     plt.title(title)
     ax.set_xlabel("x [px]")
     ax.set_ylabel("y [px]")
     plt.grid(True)
-    ax.set_xlim(cfg["ARENA_XLIM"])
-    ax.set_ylim(cfg["ARENA_YLIM"])
+
+    ax.set_xlim([0, cfg["ARENA_XLIM"][-1] * (cfg["POGOBOT_DIAMETER_CM"] / cfg["PIXEL_DIAMETER"])])
+    ax.set_ylim([0, cfg["ARENA_YLIM"][-1] * (cfg["POGOBOT_DIAMETER_CM"] / cfg["PIXEL_DIAMETER"])])
 
     if bg_path:
         bg = cv2.imread(bg_path, cv2.IMREAD_GRAYSCALE)
