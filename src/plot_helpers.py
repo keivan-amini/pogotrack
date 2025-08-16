@@ -1,4 +1,5 @@
 import cv2
+import math
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -21,25 +22,36 @@ def visualize_contours(frame, contours, x, y, thetas, cfg):
 
     # Convert to RGB for Matplotlib display
     if len(frame.shape) == 3 and frame.shape[2] == 3:
-        frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        frame_disp = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+    else:
+        frame_disp = frame.copy()
 
-    # Keep the original (y, x) ordering used in your codebase
+    # Draw centroids + arrows
     for x0, y0, theta in zip(x, y, thetas):
         x1 = int(x0 + arrow_length_frame * np.cos(np.deg2rad(theta)))
         y1 = int(y0 + arrow_length_frame * np.sin(np.deg2rad(theta)))
-        cv2.circle(frame, (y0, x0), centroids_size, (0, 255, 0), -1)
-        cv2.arrowedLine(frame, (y0, x0), (y1, x1), (0, 255, 0), 2, tipLength=tip_length)
+        cv2.circle(frame_disp, (x0, y0), centroids_size, (0, 255, 0), -1)
+        cv2.arrowedLine(frame_disp, (x0, y0), (x1, y1),
+                        (0, 255, 0), 2, tipLength=tip_length)
 
-    # Plot cropped ROIs for each contour
-    num_contours = len(contours)
-    cols = 3
-    rows = (num_contours // cols) + (num_contours % cols > 0)
+    # --- Setup subplot grid ---
+    n = len(thetas)
+    if n == 0:
+        print("No pogobots detected, nothing to plot.")
+        return
+    elif n == 1:
+        cols, rows = 1, 1
+    else:
+        cols = min(3, n)
+        rows = math.ceil(n / cols)
 
     plt.figure(figsize=(15, 5 * rows))
+
+    # Plot cropped ROIs for each contour
     for i, contour in enumerate(contours):
         mask = np.zeros(frame.shape[:2], dtype=np.uint8)
         cv2.drawContours(mask, [contour], -1, 255, thickness=-1)
-        roi = cv2.bitwise_and(frame, frame, mask=mask)
+        roi = cv2.bitwise_and(frame_disp, frame_disp, mask=mask)
 
         xb, yb, w, h = cv2.boundingRect(contour)
         cropped = roi[yb:yb + h, xb:xb + w]
