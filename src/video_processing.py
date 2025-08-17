@@ -1,3 +1,16 @@
+"""
+@author: Keivan Amini, PhD student
+
+pogotrack core module
+
+This module has the aim to construct the VideoProcessing class,
+useful to initialize and run the whole pogotrack pipeline.
+It imports helpers and utility functions from the other modules
+contained in src, and create a default config dictionary 
+containing all the video processing parameters. Note: these
+default parameters are overwritten by config/default.yaml.
+"""
+
 import cv2
 import yaml
 import pandas as pd
@@ -19,6 +32,30 @@ from .utils import (
 
 
 class VideoProcessor:
+
+    """
+    Description
+    -----------
+    This class wraps-up all the video processing function
+    and loops thorugh the input pogobot experiment video
+    frame by frame. The final output is a .csv file,
+    containing, respectively:
+
+    |  time |  x  |  y  | theta | particle |
+    |-------|-----|-----|-------|----------|
+    |  0.0  |  78 |  60 |  18.1 |    0     |
+    |  0.04 |  77 |  60 |  18.3 |    0     |
+    |  ...  | ... | ... |  ...  |   ...    |
+    
+    where:
+
+    - time: experiment time [s]
+    - x: pogobots' horizontal coordinate [cm]
+    - y: pogobots' vertical coordinate [cm]
+    - theta: direction of the arrow in pogobots' head [°]
+    - particle: pogobots' id
+
+    """
 
     DEFAULTS = {
         "N_POGO": 1,
@@ -44,7 +81,6 @@ class VideoProcessor:
         "HEAD_WIDTH": 30,
         "HEAD_LENGTH": 30,
         "TRAJECTORY_DPI": 300,
-        "VISUALIZE_CONTOURS_FRAMES": [],
     }
 
     def __init__(self, video_path, background_path, save_path, config_path, frame_visualize=None):
@@ -176,7 +212,7 @@ class VideoProcessor:
         df_transformed.to_csv(self.save_path, index=False)
 
         # Optional trajectories plot (controlled from YAML)
-        plot_trajectories(self.save_path, "Tracking Results", self.config, bg_path=self.background_path)
+        plot_trajectories(self.save_path, "Trajectories", self.config, bg_path=self.background_path)
 
         end = time.time()
         print(f"Processed {n} frames in {round(end - start, 2)}s → {self.save_path}")
