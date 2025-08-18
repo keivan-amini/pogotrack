@@ -107,7 +107,7 @@ class VideoProcessor:
         "PIXEL_DIAMETER": 97.01,
         "DEBUG_MODE": True,
 
-        "PLOT_TRAJECTORIES": False,
+        "PLOT_TRAJECTORIES": True,
         "ARENA_XLIM": [0, 2992],
         "ARENA_YLIM": [0, 2976],
         "ARROW_LENGTH_VIS": 100,
@@ -180,7 +180,25 @@ class VideoProcessor:
                 dictionary of configuration parameters loaded from .yaml.
         """
 
-        merged = {**self.DEFAULTS, **yaml_config}
+        yaml_config = yaml_config or {}
+
+        def coerce_bool(v):
+            if isinstance(v, str):
+                s = v.strip().lower()
+                if s in ("true", "yes", "1", "on"):  return True
+                if s in ("false", "no", "0", "off"): return False
+            return v
+
+        # Normalize keys and coerce booleans recursively if needed
+        normalized_yaml = {}
+        for k, v in yaml_config.items():
+            key_up = str(k).upper()
+            if isinstance(v, dict):
+                normalized_yaml[key_up] = {str(kk).upper(): coerce_bool(vv) for kk, vv in v.items()}
+            else:
+                normalized_yaml[key_up] = coerce_bool(v)
+
+        merged = {**self.DEFAULTS, **normalized_yaml}
         self.config = merged
         for key, value in merged.items():
             setattr(self, key, value)
@@ -227,7 +245,7 @@ class VideoProcessor:
         - Saves processed trajectories to .csv file.
         - Optionally generates trajectory plots.        
         """
-        
+
         start = time.time()
         self._load_video_and_background()
         mask = self._create_mask()
@@ -235,7 +253,7 @@ class VideoProcessor:
         total_frames = int(self.video.get(cv2.CAP_PROP_FRAME_COUNT)) 
         n = 0
 
-        with tqdm(total=total_frames, desc="Processing video", unit="frame") as pbar:
+        with tqdm(total = total_frames, desc= "Processing video", unit= "frame") as pbar:
             while self.video.isOpened():
                 ret, frame = self.video.read()
                 if not ret:
@@ -263,7 +281,8 @@ class VideoProcessor:
 
                     if len(thetas) != self.N_POGO:
                         print(f"Frame {n}: Still {len(thetas)} bots detected. Interrupting!")
-                        if self.config.get("DEBUG_MODE", False):
+                        if bool(self.config.get("DEBUG_MODE", False)):
+                            print(self.config["DEBUG_MODE"])
                             debug_frame(frame_masked, diff, thresh, contours, title=f"Debug frame {n}")
                         break 
 
@@ -289,7 +308,8 @@ class VideoProcessor:
         df_transformed.to_csv(self.save_path, index = False)
 
         # Optional trajectories plot (controlled from .yaml)
-        plot_trajectories(self.save_path, "Trajectories", self.config, bg_path = self.background_path)
+        if bool(self.config.get("PLOT_TRAJECTORIES", False)):
+            plot_trajectories(self.save_path, "Trajectories", self.config, bg_path = self.background_path)
 
         end = time.time()
         print(f"Processed {n} frames in {round(end - start, 2)}s → {self.save_path}")

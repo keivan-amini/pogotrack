@@ -12,7 +12,7 @@ def main():
     """
     Description
     -----------
-    
+
     The execution of this function launches the 
     whole pogotrack pipeline, i.e. the extraction
     of x, y, theta and id of a video recording
@@ -41,7 +41,7 @@ def main():
     The optional argument --visualize allow to visualize the
     extracted contours and theta angle for each pogobot, in 
     this case for frame 1, 10 and 200 of the video example.mp4.
-
+    
     """
 
     parser = argparse.ArgumentParser(description = "Pogotrack video processing pipeline")
