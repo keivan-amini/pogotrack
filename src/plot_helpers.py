@@ -152,10 +152,8 @@ def plot_trajectories(csv_path, title, cfg, bg_path = None):
 
     """
     Plot trajectories from CSV (optionally on a background image).
-    Runs only if cfg["PLOT_TRAJECTORIES"] is True in config/default.yaml
 
     Expected keys in cfg:
-      - PLOT_TRAJECTORIES (bool)
       - ARENA_XLIM
       - ARENA_YLIM
       - POGOBOT_DIAMETER_CM
@@ -184,9 +182,6 @@ def plot_trajectories(csv_path, title, cfg, bg_path = None):
             the trajectory generated.
 
     """
-    
-    if cfg.get("PLOT_TRAJECTORIES", False):
-        return
 
     df = pd.read_csv(csv_path)
     df["frame"] = df["time"] * cfg["FPS"]
