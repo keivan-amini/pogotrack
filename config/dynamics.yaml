@@ -1,0 +1,27 @@
+# === VIDEO CUTTING PARAMETERS =========
+N_POGO: 1              # Expected number of Pogobots in the arena.
+RUN_DURATION: 10             # Duration of each Pogobot run (s)
+PAUSE_DURATION: 7.68         # Pause between consecutive runs (s)
+DEFAULT_START_TIME: 3        # Time offset before first run (s)
+
+TESTED_PWM:                  # PWM values tested in the experiment
+  - 500
+  - 600
+  - 650
+  - 700
+  - 750
+  - 800
+  - 850
+  - 900
+  - 950
+  - 1023
+
+TRIALS_PER_PWM: 10           # Number of trials per PWM value
+
+# === DATA VALIDATION =================
+MIN_FRAMES: 100              # Minimum number of frames for a valid run
+
+# === OUTER TRAJECTORY FILTER =========
+CENTER_X: 1518               # Arena center X coordinate (px)
+CENTER_Y: 1529               # Arena center Y coordinate (px)
+OUTER_RADIUS: 1200           # Maximum allowed radius (px) before trimming trajectory
