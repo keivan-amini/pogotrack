@@ -10,6 +10,7 @@ the whole video and obtain different dataset for each run.
 """
 
 ## at the moment focusing on a situation where just one pogobot is in the arena
+## implement CLI !
 
 import os
 import yaml
@@ -23,7 +24,9 @@ class DynamicsProcessor:
     Description
     -----------
     Handles extraction and processing of videos for dynamics characterization.
-    Wraps cutting (per PWM run) and batch processing with VideoProcessor.
+    - Prepares workspace (one folder per pogobot)
+    - Trims videos into runs (per PWM, per trial)
+    - Processes runs with VideoProcessor → saves per-run CSV
 
 
     Methods
@@ -51,7 +54,6 @@ class DynamicsProcessor:
 
     def __init__(self, folder_path, background_path, dyn_config_path):
 
-        # really not sure if folder path should be an argument of the class !
 
         """
         Initialize class by defining the attribute variables.
@@ -75,7 +77,7 @@ class DynamicsProcessor:
                 yaml_config = yaml.safe_load(f) or {}
 
         self._load_config(yaml_config)
-        self.prepare_workspace(self.video_path)
+        self.video_map = self.prepare_workspace(self.folder_path)
 
 
 
@@ -91,28 +93,12 @@ class DynamicsProcessor:
                 dictionary of configuration parameters loaded from .yaml.
         """
 
-        yaml_config = yaml_config or {}
-
-        def coerce_bool(v):
-            if isinstance(v, str):
-                s = v.strip().lower()
-                if s in ("true", "yes", "1", "on"):  return True
-                if s in ("false", "no", "0", "off"): return False
-            return v
-
-        # Normalize keys and coerce booleans recursively if needed
-        normalized_yaml = {}
-        for k, v in yaml_config.items():
-            key_up = str(k).upper()
-            if isinstance(v, dict):
-                normalized_yaml[key_up] = {str(kk).upper(): coerce_bool(vv) for kk, vv in v.items()}
-            else:
-                normalized_yaml[key_up] = coerce_bool(v)
-
-        merged = {**self.DEFAULTS, **normalized_yaml}
+        normalized_yaml = {k.upper(): v for k, v in (yaml_config or {}).items()}
+        merged = {**self.DEFAULT_DYNAMICS, **normalized_yaml}
         self.config = merged
+        # expose lowercase attributes
         for key, value in merged.items():
-            setattr(self, key, value)
+            setattr(self, key.lower(), value)
 
 
     def prepare_workspace(self, folder_path):
@@ -121,18 +107,24 @@ class DynamicsProcessor:
 
         Parameters
         ----------
-        folder_path (str)
-            Path where .mp4 videos are expected.
+            folder_path (str)
+                path where .mp4 videos are expected.
+        
+        Return
+        ------
+            video_map (dict):
+                dict containing as keys the pogobot ID, and as
+                values the video path associated to the pogobot.
 
         """
-        video_map = {}
 
+        video_map = {}
         for pog in self.name_pogs:
             video_filename = f"{pog}.mp4"
             video_path = os.path.join(folder_path, video_filename)
 
             if not os.path.exists(video_path):
-                print(f"⚠️ Warning: missing video for {pog}: {video_filename}")
+                print(f"⚠️ Missing video for {pog}: {video_filename}")
                 continue
 
             pog_folder = os.path.join(folder_path, pog)
@@ -141,105 +133,128 @@ class DynamicsProcessor:
             video_map[pog] = video_path
             print(f"📂 Workspace ready for {pog}: {pog_folder}")
 
+        return video_map
 
 
-    def extract_pogobot_runs(self, folder_path: str, video_filename: str = None):
+
+    def trim_pogobot_runs(self, pog: str, input_video_path: str):
+
         """
         Cuts a long test video into smaller clips (per PWM, per trial).
+        Saved as: {pog}/{pog}_{pwm}_{trial}.mp4
 
         Parameters
         ----------
-            folder_path (str): 
-                directory where the full video is located.
-            video_filename (str):
-                optional video filename (defaults to folder_name.mp4).
+            pog (str): 
+                pogobot' ID, e.g., "pog_121".
+            input_video_path (str):
+                full video path for video to be trimmed.
+
         """
-        folder_name = os.path.basename(folder_path)
-
-        if video_filename is None:
-            video_filename = f"{folder_name}.mp4"
-
-        input_video_path = os.path.join(folder_path, video_filename)
 
         if not os.path.exists(input_video_path):
             raise FileNotFoundError(f"Video not found: {input_video_path}")
 
-        print(f"🎬 Processing video: {input_video_path}")
+        print(f"🎬 Processing video for {pog}: {input_video_path}")
 
         for pwm_index, pwm in enumerate(self.tested_pwm):
-            pwm_folder = os.path.join(folder_path, str(pwm))
-            os.makedirs(pwm_folder, exist_ok=True)
-
             for trial in range(self.trials_per_pwm):
                 run_index = pwm_index * self.trials_per_pwm + trial
                 clip_start = self.default_start_time + run_index * (
                     self.run_duration + self.pause_duration
                 )
-                clip_output_name = f"run_{trial}.mp4"
-                output_path = os.path.join(pwm_folder, clip_output_name)
+
+                output_name = f"{pog}_{pwm}_{trial}.mp4"
+                output_path = os.path.join(self.folder_path, pog, output_name)
 
                 try:
                     (
                         ffmpeg
                         .input(input_video_path, ss=clip_start, t=self.run_duration)
-                        .output(output_path, codec="copy")  # no re-encoding
+                        .output(output_path, codec="copy")
                         .run(overwrite_output=True, quiet=True)
                     )
                     print(f"✅ Created: {output_path}")
                 except ffmpeg.Error as e:
-                    print(f"❌ Error processing run {run_index} at PWM {pwm}: {e}")
+                    print(f"❌ Error trimming run {run_index} ({pwm}, trial {trial}): {e}")
         
 
-    def batch_process_combined_videos(self, folder_path: str):
+    def process_runs(self, pog: str):
+
         """
-        Process each trimmed video of a multi-Pogobot experiment,
-        extract data per Pogobot, and save results in subfolders.
+        Run VideoProcessor on each trimmed video for one pogobot.
+        Saves CSV next to video.
 
         Parameters
-        --------
-            folder_path (str): Root folder containing PWM subfolders with videos.
-            background_path (str): Path to arena background image.
-        """
-        for pwm in self.tested_pwm:
-            pwm_folder = os.path.join(folder_path, str(pwm))
+        ----------
+            pog (str):
+                pogobot' ID, e.g., "pog_121"
 
+        """
+
+        pog_folder = os.path.join(self.folder_path, pog)
+        if not os.path.exists(pog_folder):
+            raise FileNotFoundError(f"No folder for pogobot {pog}")
+
+        for pwm in self.tested_pwm:
             for trial in range(self.trials_per_pwm):
-                video_filename = f"run_{trial}.mp4"
-                video_path = os.path.join(pwm_folder, video_filename)
+                video_filename = f"{pog}_{pwm}_{trial}.mp4"
+                video_path = os.path.join(pog_folder, video_filename)
 
                 if not os.path.exists(video_path):
-                    print(f"⚠️ Missing: {video_path}")
                     continue
 
-                # Temporary output before splitting particles
-                temp_csv_path = os.path.join(folder_path, f"temp_{pwm}_{trial}.csv")
-
+                output_csv = video_path.replace(".mp4", ".csv")
                 try:
-                    # Run arena analyzer (from video_processing pipeline)
                     vp = VideoProcessor(video_path, self.background_path)
-                    vp.process(temp_csv_path)
-
-                    # Load results
-                    df = pd.read_csv(temp_csv_path)
-
-                    if "particle" not in df.columns:
-                        print(f"❌ No 'particle' column in {video_filename}")
-                        continue
-
-                    # Save each particle's data separately
-                    for particle_id in df["particle"].unique():
-                        df_particle = df[df["particle"] == particle_id].copy()
-
-                        pog_folder = os.path.join(folder_path, f"pog_{particle_id}")
-                        os.makedirs(pog_folder, exist_ok=True)
-
-                        output_filename = f"pog_{particle_id}_{pwm}_{trial}.csv"
-                        output_path = os.path.join(pog_folder, output_filename)
-
-                        df_particle.to_csv(output_path, index=False)
-                        print(f"✅ Saved: {output_path}")
-
-                    os.remove(temp_csv_path)
-
+                    vp.process(output_csv)
+                    print(f"✅ CSV saved: {output_csv}")
                 except Exception as e:
-                    print(f"❌ Error in {video_filename}: {e}")
+                    print(f"❌ Error processing {video_filename}: {e}")
+
+
+
+    def run_all(self):
+        
+        """
+        Run full pipeline: trim + process for all pogobots found.
+        """
+        
+        for pog, video_path in self.video_map.items():
+            self.trim_pogobot_runs(pog, video_path)
+            self.process_runs(pog)
+
+    def trim(self):
+
+        """
+        Trim only pogobot videos.
+        """
+
+        for pog, video_path in self.video_map.items():
+            self.trim_pogobot_runs(pog, video_path)
+
+    def process(self):
+
+        """
+        Process only pogobot videos, obtaining .csv datasets.
+        """
+
+        for pog in self.video_map:
+            self.process_runs(pog)
+    
+    def extract(self):
+
+        """
+        Extract only physical variables from .csv datasets.
+        """
+        # TODO
+        pass
+
+    def plot(self):
+
+        """
+        Plot only.
+        """
+        
+        # TODO
+        pass
