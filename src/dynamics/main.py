@@ -35,19 +35,19 @@ def main():
     )
 
     if args.mode == "trim":
-        processor.trim()
+        processor.trim(pogobot = args.pogobot)
 
     if args.mode == "process":
-        processor.process()
+        processor.process(pogobot = args.pogobot)
     
     if args.mode == "extract":
-        processor.extract() #TODO
+        processor.extract(pogobot = args.pogobot) #TODO
     
     if args.mode == "plot":
-        processor.plot() #TODO
+        processor.plot(pogobot = args.pogobot) #TODO
 
     if args.mode == "complete":
-        processor.run_all()
+        processor.run_all(pogobot = args.pogobot)
 
 
 if __name__ == "__main__":

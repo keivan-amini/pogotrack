@@ -214,32 +214,72 @@ class DynamicsProcessor:
 
 
 
-    def run_all(self):
+    def run_all(self, pogobot: str = None):
         
         """
         Run full pipeline: trim + process for all pogobots found.
+        If pogobot is provided, only run the full pipeline for him.
+
+        Parameters
+        ----------
+            pogobot (str):
+                folder name associated with a certain pogobot,
+                example: 'pog_121'. Default is None (run full
+                pipeline for all the pogobots' video)
         """
         
-        for pog, video_path in self.video_map.items():
+        pogs_to_run = [pogobot] if pogobot else self.video_map.keys()
+
+        for pog in pogs_to_run:
+            if pog not in self.video_map:
+                raise ValueError(f"Pogobot {pog} not found in workspace")
+
+            video_path = self.video_map[pog]
             self.trim_pogobot_runs(pog, video_path)
             self.process_runs(pog)
 
-    def trim(self):
+    def trim(self, pogobot: str = None):
 
         """
         Trim only pogobot videos.
+        If pogobot is provided, only trim his associated video.
+
+        Parameters
+        ----------
+            pogobot (str):
+                folder name associated with a certain pogobot,
+                example: 'pog_121'. Default is None (trim all
+                the pogobots' video)
+
         """
 
-        for pog, video_path in self.video_map.items():
-            self.trim_pogobot_runs(pog, video_path)
+        pogs_to_run = [pogobot] if pogobot else self.video_map.keys()
 
-    def process(self):
+        for pog in pogs_to_run:
+            if pog not in self.video_map:
+                raise ValueError(f"Pogobot {pog} not found in workspace")
+            self.trim_pogobot_runs(pog, self.video_map[pog])
+
+    def process(self, pogobot: str = None):
 
         """
         Process only pogobot videos, obtaining .csv datasets.
+        If pogobot is provided, only process his associated video.
+
+        Parameters
+        ----------
+            pogobot (str):
+                folder name associated with a certain pogobot,
+                example: 'pog_121'. Default is None (process all
+                the pogobots' video)
+
         """
 
-        for pog in self.video_map:
+        pogs_to_run = [pogobot] if pogobot else self.video_map.keys()
+
+        for pog in pogs_to_run:
+            if pog not in self.video_map:
+                raise ValueError(f"Pogobot {pog} not found in workspace")
             self.process_runs(pog)
     
     def extract(self):
@@ -255,6 +295,6 @@ class DynamicsProcessor:
         """
         Plot only.
         """
-        
+
         # TODO
         pass
