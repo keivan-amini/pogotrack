@@ -19,7 +19,8 @@ def main():
     parser = argparse.ArgumentParser(description = "Dynamics characterization pipeline")
     parser.add_argument("--video_dir", required = True, help = "Folder with pogobot videos")
     parser.add_argument("--background", required = True, help = "Path to background image (.bmp)")
-    parser.add_argument("--config", required = True, help = "Path to dynamics.yaml config")
+    parser.add_argument("--dynconfig", required = True, help = "Path to dynamics .yaml config")
+    parser.add_argument("--processconfig", required = True, help = "Path to processing .yaml config")
     parser.add_argument("--mode", required = True, type = str,
                         help = "Which step of the dynamics characterization to launch." \
                         "Possible arguments: trim, process, extract, plot, or complete")
@@ -31,7 +32,8 @@ def main():
     processor = DynamicsProcessor(
         folder_path = args.video_dir,
         background_path = args.background,
-        dyn_config_path = args.config,
+        dyn_config_path = args.dynconfig,
+        processing_config_path = args.processconfig
     )
 
     if args.mode == "trim":
