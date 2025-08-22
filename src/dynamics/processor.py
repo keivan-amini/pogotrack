@@ -245,7 +245,7 @@ class DynamicsProcessor:
                 try:
                     df = pd.read_csv(output_csv)
                     last_time = df["time"].iloc[-1]
-                    print(f"Dataset {output_csv} considers: {last_time} s")
+                    print(f"Dataset {output_csv} considers: {round(last_time,2)} s")
                 except Exception as e:
                     print(f"❌ Error getting {output_csv}: {e}")
 
