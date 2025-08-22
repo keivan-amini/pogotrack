@@ -16,7 +16,15 @@ import os
 import yaml
 import ffmpeg
 import pandas as pd
-from ..video_processing import VideoProcessor 
+
+from .utils import (
+    discard_if_too_many_missing,
+    trim_leading_trailing,
+    interpolate_missing,
+    filter_trajectories,
+    )
+
+from ..video_processing import VideoProcessor
 
 
 class DynamicsProcessor:
@@ -50,6 +58,7 @@ class DynamicsProcessor:
     "CENTER_X": 1518,
     "CENTER_Y": 1529,
     "OUTER_RADIUS": 1200,
+    "MIN_SECONDS": 4,
     }
 
     def __init__(self, folder_path, background_path, dyn_config_path, processing_config_path):
@@ -245,9 +254,48 @@ class DynamicsProcessor:
                 try:
                     df = pd.read_csv(output_csv)
                     last_time = df["time"].iloc[-1]
-                    print(f"Dataset {output_csv} considers: {round(last_time,2)} s")
-                except Exception as e:
-                    print(f"❌ Error getting {output_csv}: {e}")
+                    if last_time < self.min_seconds:
+                        print(f"❌ Problems found with the following video: {video_path}: {round(last_time, 2)} s")
+                except:
+                    print(f"❌ Problems found with the following video: {video_path}: not found.")
+
+    def clean_csv(self, pogobot: str = None):
+
+        """
+        Clean the generated .csv dataset:
+            1) Remove non-valid rows.
+            2) If the non-valid row at frame i is isolated, 
+                interpolate between step i-1 and i+1.
+            3) Filter outer trajectories
+        
+        Parameters:
+        ----------
+            pogobot (str):
+                folder name associated with a certain pogobot,
+                example: 'pog_121'. Default is None (clean all
+                the pogobots' .csv generated files)    
+        """
+
+        pog_folder = os.path.join(self.folder_path, pogobot)
+        if not os.path.exists(pog_folder):
+            raise FileNotFoundError(f"No folder for pogobot {pogobot}")
+
+        for pwm in self.tested_pwm:
+            for trial in range(self.trials_per_pwm):
+                csv_path = f"{pogobot}_{pwm}_{trial}.csv"
+
+                if not os.path.exists(csv_path):
+                    continue
+
+            df = pd.read_csv(csv_path)
+            #1) TODO
+            #2) TODO
+            #3) 
+            df = filter_trajectories(df, self.CENTER_X, self.CENTER_Y, self.OUTER_RADIUS)
+
+            df.to_csv(csv_path, index = False)
+        
+
 
 
     def run_all(self, pogobot: str = None):
@@ -261,7 +309,7 @@ class DynamicsProcessor:
             pogobot (str):
                 folder name associated with a certain pogobot,
                 example: 'pog_121'. Default is None (run full
-                pipeline for all the pogobots' video)
+                pipeline for all the pogobots' videos)
         """
         
         pogs_to_run = [pogobot] if pogobot else self.video_map.keys()
@@ -272,7 +320,7 @@ class DynamicsProcessor:
 
             video_path = self.video_map[pog]
             self.trim_pogobot_runs(pog, video_path)
-            self.process_runs(pog)
+            self.process_runs(pog) # add the new methods: check, clean, extract, plot
 
     def trim(self, pogobot: str = None):
 
@@ -285,7 +333,7 @@ class DynamicsProcessor:
             pogobot (str):
                 folder name associated with a certain pogobot,
                 example: 'pog_121'. Default is None (trim all
-                the pogobots' video)
+                the pogobots' videos)
 
         """
 
@@ -307,7 +355,7 @@ class DynamicsProcessor:
             pogobot (str):
                 folder name associated with a certain pogobot,
                 example: 'pog_121'. Default is None (process all
-                the pogobots' video)
+                the pogobots' videos)
 
         """
 
@@ -330,7 +378,7 @@ class DynamicsProcessor:
             pogobot (str):
                 folder name associated with a certain pogobot,
                 example: 'pog_121'. Default is None (check all
-                the pogobots' .csv generated file)
+                the pogobots' .csv generated files)
 
         """
         pogs_to_run = [pogobot] if pogobot else self.video_map.keys()
@@ -339,6 +387,28 @@ class DynamicsProcessor:
             if pog not in self.video_map:
                 raise ValueError(f"Pogobot {pog} not found in workspace")
             self.check_csv(pog)
+
+    def clean(self, pogobot: str = None):
+
+        """
+        Launch only the clean_csv() function to the generated
+        dataset.
+
+        Parameters
+        ----------
+            pogobot (str):
+                folder name associated with a certain pogobot,
+                example: 'pog_121'. Default is None (clean all
+                the pogobots' .csv generated files)
+
+        """
+
+        pogs_to_run = [pogobot] if pogobot else self.video_map.keys()
+
+        for pog in pogs_to_run:
+            if pog not in self.video_map:
+                raise ValueError(f"Pogobot {pog} not found in workspace")
+            self.clean_csv(pog)
 
     def extract(self):
 
