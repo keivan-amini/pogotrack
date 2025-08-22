@@ -23,7 +23,7 @@ def main():
     parser.add_argument("--processconfig", required = True, help = "Path to processing .yaml config")
     parser.add_argument("--mode", required = True, type = str,
                         help = "Which step of the dynamics characterization to launch." \
-                        "Possible arguments: trim, process, extract, plot, or complete")
+                        "Possible arguments: trim, process, check, extract, plot, or complete")
     parser.add_argument("--pogobot", required = False, type = str,
                         help = "Focus only on one pogobot! Example: pog_191")
     args = parser.parse_args()
@@ -41,6 +41,9 @@ def main():
 
     if args.mode == "process":
         processor.process(pogobot = args.pogobot)
+    
+    if args.mode == "check":
+        processor.check(pogobot = args.pogobot)
     
     if args.mode == "extract":
         processor.extract(pogobot = args.pogobot) #TODO

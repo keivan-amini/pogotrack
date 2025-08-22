@@ -148,7 +148,7 @@ class DynamicsProcessor:
 
         Parameters
         ----------
-            pog (str): 
+            pogobot (str): 
                 pogobot' ID, e.g., "pog_121".
             input_video_path (str):
                 full video path for video to be trimmed.
@@ -190,7 +190,7 @@ class DynamicsProcessor:
 
         Parameters
         ----------
-            pog (str):
+            pogobot (str):
                 pogobot' ID, e.g., "pog_121"
 
         """
@@ -215,6 +215,39 @@ class DynamicsProcessor:
                 except Exception as e:
                     print(f"❌ Error processing {video_filename}: {e}")
 
+    def check_csv(self, pogobot: str):
+
+        """
+        In the generated .csv dataset, print only the last
+        element of the column [time]. Useful for debugging
+        purposes.
+
+        Parameters
+        ----------
+            pogobot (str):
+                pogobot' ID, e.g., "pog_121"
+
+        """
+
+        pog_folder = os.path.join(self.folder_path, pogobot)
+        if not os.path.exists(pog_folder):
+            raise FileNotFoundError(f"No folder for pogobot {pogobot}")
+
+        for pwm in self.tested_pwm:
+            for trial in range(self.trials_per_pwm):
+                video_filename = f"{pogobot}_{pwm}_{trial}.mp4"
+                video_path = os.path.join(pog_folder, video_filename)
+
+                if not os.path.exists(video_path):
+                    continue
+
+                output_csv = video_path.replace(".mp4", ".csv")
+                try:
+                    df = pd.read_csv(output_csv)
+                    last_time = df["time"].iloc[-1]
+                    print(f"Dataset {output_csv} considers: {last_time} s")
+                except Exception as e:
+                    print(f"❌ Error getting {output_csv}: {e}")
 
 
     def run_all(self, pogobot: str = None):
@@ -285,6 +318,28 @@ class DynamicsProcessor:
                 raise ValueError(f"Pogobot {pog} not found in workspace")
             self.process_runs(pog)
     
+    def check(self, pogobot: str = None):
+
+        """
+        In the generated .csv dataset, print only the last
+        element of the column [time]. Useful for debugging
+        purposes.
+
+        Parameters
+        ----------
+            pogobot (str):
+                folder name associated with a certain pogobot,
+                example: 'pog_121'. Default is None (check all
+                the pogobots' .csv generated file)
+
+        """
+        pogs_to_run = [pogobot] if pogobot else self.video_map.keys()
+
+        for pog in pogs_to_run:
+            if pog not in self.video_map:
+                raise ValueError(f"Pogobot {pog} not found in workspace")
+            self.check_csv(pog)
+
     def extract(self):
 
         """
