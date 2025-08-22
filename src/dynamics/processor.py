@@ -52,7 +52,7 @@ class DynamicsProcessor:
     "OUTER_RADIUS": 1200,
     }
 
-    def __init__(self, folder_path, background_path, dyn_config_path):
+    def __init__(self, folder_path, background_path, dyn_config_path, processing_config_path):
 
 
         """
@@ -64,12 +64,15 @@ class DynamicsProcessor:
                 path to the input dynamics experiment (.mp4).
             background_path (str):
                 path to the background image (.bmp).
-            config_path (str):
+            dyn_config_path (str):
                 path to dynamics parameter .yaml configuration file.
+            processing_config_path (str):
+                path to processing parameter .yaml configuration file.
         """
 
         self.folder_path = folder_path
         self.background_path = background_path
+        self.processing_config = processing_config_path
 
         yaml_config = {}
         if dyn_config_path and os.path.exists(dyn_config_path):
@@ -179,7 +182,7 @@ class DynamicsProcessor:
                     print(f"❌ Error trimming run {run_index} ({pwm}, trial {trial}): {e}")
         
 
-    def process_runs(self, pog: str):
+    def process_runs(self, pogobot: str):
 
         """
         Run VideoProcessor on each trimmed video for one pogobot.
@@ -192,13 +195,13 @@ class DynamicsProcessor:
 
         """
 
-        pog_folder = os.path.join(self.folder_path, pog)
+        pog_folder = os.path.join(self.folder_path, pogobot)
         if not os.path.exists(pog_folder):
-            raise FileNotFoundError(f"No folder for pogobot {pog}")
+            raise FileNotFoundError(f"No folder for pogobot {pogobot}")
 
         for pwm in self.tested_pwm:
             for trial in range(self.trials_per_pwm):
-                video_filename = f"{pog}_{pwm}_{trial}.mp4"
+                video_filename = f"{pogobot}_{pwm}_{trial}.mp4"
                 video_path = os.path.join(pog_folder, video_filename)
 
                 if not os.path.exists(video_path):
@@ -206,8 +209,8 @@ class DynamicsProcessor:
 
                 output_csv = video_path.replace(".mp4", ".csv")
                 try:
-                    vp = VideoProcessor(video_path, self.background_path)
-                    vp.process(output_csv)
+                    vp = VideoProcessor(video_path, self.background_path, output_csv, self.processing_config)
+                    vp.process()
                     print(f"✅ CSV saved: {output_csv}")
                 except Exception as e:
                     print(f"❌ Error processing {video_filename}: {e}")
