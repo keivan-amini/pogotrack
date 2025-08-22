@@ -12,6 +12,37 @@ def main():
     """
     Description
     -----------
+    
+    Example:
+
+    /usr/bin/python3 -m src.dynamics.main \
+    --video_dir data/tpu \
+    --background data/tpu/bkg.bmp \
+    --dynconfig config/dynamics.yaml \
+    --processconfig config/default.yaml \
+    --mode check \
+    --pogobot pog_84
+
+    To run in parallel from the terminal two pogobots:
+
+    /usr/bin/python3 -m src.dynamics.main \
+        --video_dir data/tpu \
+        --background data/tpu/bkg.bmp \
+        --dynconfig config/dynamics.yaml \
+        --processconfig config/default.yaml \
+        --mode process \
+        --pogobot pog_91 &
+
+    /usr/bin/python3 -m src.dynamics.main \
+        --video_dir data/tpu \
+        --background data/tpu/bkg.bmp \
+        --dynconfig config/dynamics.yaml \
+        --processconfig config/default.yaml \
+        --mode process \
+        --pogobot pog_95 &
+    wait
+
+
     TODO  
     
     """
