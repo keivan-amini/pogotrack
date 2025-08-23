@@ -18,10 +18,10 @@ import ffmpeg
 import pandas as pd
 
 from .utils import (
-    discard_if_too_many_missing,
+    should_discard_trajectory,
     trim_leading_trailing,
     interpolate_missing,
-    filter_trajectories,
+    filter_wall_hit,
     )
 
 from ..video_processing import VideoProcessor
@@ -59,6 +59,8 @@ class DynamicsProcessor:
     "CENTER_Y": 1529,
     "OUTER_RADIUS": 1200,
     "MIN_SECONDS": 4,
+    "MAX_FRACTION_SKIPPED": 0.3,
+    "MAX_SKIPPED_FRAMES": 4,
     }
 
     def __init__(self, folder_path, background_path, dyn_config_path, processing_config_path):
@@ -263,10 +265,10 @@ class DynamicsProcessor:
 
         """
         Clean the generated .csv dataset:
-            1) Remove non-valid rows.
-            2) If the non-valid row at frame i is isolated, 
-                interpolate between step i-1 and i+1.
-            3) Filter outer trajectories
+            1) Remove datasets with too many missing rows.
+            2) Trim leading/trailing skipped frames.
+            3) Interpolate isolated skipped frames.
+            4) Filter outer trajectories (Pogobot hitting wall).
         
         Parameters:
         ----------
@@ -275,6 +277,7 @@ class DynamicsProcessor:
                 example: 'pog_121'. Default is None (clean all
                 the pogobots' .csv generated files)    
         """
+
 
         pog_folder = os.path.join(self.folder_path, pogobot)
         if not os.path.exists(pog_folder):
@@ -288,15 +291,22 @@ class DynamicsProcessor:
                     continue
 
             df = pd.read_csv(csv_path)
-            #1) TODO
-            #2) TODO
-            #3) 
-            df = filter_trajectories(df, self.CENTER_X, self.CENTER_Y, self.OUTER_RADIUS)
+
+            # (1) Discard file if missing fraction too high
+            df = should_discard_trajectory(df, self.MAX_FRACTION_SKIPPED, self.MAX_SKIPPED_FRAMES)
+            if df is None:
+                os.remove(csv_path)
+                print(f"Discarded {csv_path} (too many missing frames)")
+                continue
+            # (2) Trim leading and trailing skipped frames
+            df = trim_leading_trailing(df)
+            # (3) Interpolate isolated skipped frames
+            df = interpolate_missing(df)
+            # (4) Filter outer trajectories (after wall hit)
+            df = filter_wall_hit(df, self.CENTER_X, self.CENTER_Y, self.OUTER_RADIUS)
 
             df.to_csv(csv_path, index = False)
         
-
-
 
     def run_all(self, pogobot: str = None):
         
