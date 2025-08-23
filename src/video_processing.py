@@ -228,6 +228,27 @@ class VideoProcessor:
         mask = np.zeros(self.background.shape[:2], dtype=np.uint8)
         cv2.circle(mask, self.CENTER, self.RADIUS, 255, -1)
         return mask
+    
+    def skip_frame(self, n: int):
+
+        """
+        Method function useful to skip the current frame
+        during the execution of the .process() method.
+
+        Parameters
+        ----------
+            n (int):
+                number of the frame to skip
+        
+        Return
+        ------
+            n (int):
+                next frame to analyze
+        """
+
+        self.df = save_datas(self.df, n,[0],[0],[0])
+        return n + 1
+
 
     def process(self):
 
@@ -280,11 +301,13 @@ class VideoProcessor:
                     thetas = get_all_angles(thresh, y, x)
 
                     if len(thetas) != self.N_POGO:
-                        print(f"Frame {n}: Still {len(thetas)} bots detected. Interrupting!")
+                        print(f"Frame {n}: Still {len(thetas)} bots detected. Skipping frame!")
                         if bool(self.config.get("DEBUG_MODE", False)):
                             print(self.config["DEBUG_MODE"])
                             debug_frame(frame_masked, diff, thresh, contours, title=f"Debug frame {n}")
-                        break 
+                    n = self.skip_frame(n)
+                    pbar.update(1)
+                    continue
 
                 # Visualize contours if requested for this frame index
                 if n in self.frames_to_visualize:
