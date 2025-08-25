@@ -256,10 +256,10 @@ class DynamicsProcessor:
                 try:
                     df = pd.read_csv(output_csv)
                     last_time = df["time"].iloc[-1]
-                    if last_time < self.min_seconds:
+                    if last_time < self.min_seconds: #UPDATE: with the video porcessing skipping frame procedure, this does not make sense anymore
                         print(f"❌ Problems found with the following video: {video_path}: {round(last_time, 2)} s")
                 except:
-                    print(f"❌ Problems found with the following video: {video_path}: not found.")
+                    print(f"❌ Problems found with the following video: {output_csv}: not found.")
 
     def clean_csv(self, pogobot: str = None):
 
@@ -286,27 +286,55 @@ class DynamicsProcessor:
         for pwm in self.tested_pwm:
             for trial in range(self.trials_per_pwm):
                 csv_path = f"{pogobot}_{pwm}_{trial}.csv"
-
+                csv_path = os.path.join(pog_folder, csv_path)
                 if not os.path.exists(csv_path):
                     continue
 
-            df = pd.read_csv(csv_path)
+                try:
+                    df = pd.read_csv(csv_path)
+                    print(f"\n📂 Processing {csv_path} (raw={len(df)} rows)")
 
-            # (1) Discard file if missing fraction too high
-            df = should_discard_trajectory(df, self.MAX_FRACTION_SKIPPED, self.MAX_SKIPPED_FRAMES)
-            if df is None:
-                os.remove(csv_path)
-                print(f"Discarded {csv_path} (too many missing frames)")
-                continue
-            # (2) Trim leading and trailing skipped frames
-            df = trim_leading_trailing(df)
-            # (3) Interpolate isolated skipped frames
-            df = interpolate_missing(df)
-            # (4) Filter outer trajectories (after wall hit)
-            df = filter_wall_hit(df, self.CENTER_X, self.CENTER_Y, self.OUTER_RADIUS)
+                    # (1) Trim edges first so they never influence discard logic
+                    df = trim_leading_trailing(df)
+                    print(f"   → after trim_leading_trailing: {len(df)} rows")
+                    if df.empty:
+                        print(f"🗑️ Discarded {csv_path} (empty after edge trim)")
+                        os.remove(csv_path)
+                        continue
 
-            df.to_csv(csv_path, index = False)
-        
+                    # (2) Decide if this trajectory should be discarded
+                    keep = should_discard_trajectory(
+                        df,
+                        max_fraction=self.max_fraction_skipped,
+                        max_skipped=self.max_skipped_frames
+                    )
+                    if keep is None:
+                        print(f"🗑️ Discarded {csv_path} (too many missing frames)")
+                        os.remove(csv_path)
+                        continue
+                    print(f"   → after should_discard_trajectory: {len(df)} rows")
+
+                    # (3) Interpolate isolated interior gaps
+                    df = interpolate_missing(df)
+                    print(f"   → after interpolate_missing: {len(df)} rows")
+
+                    # (4) Trim after a wall hit
+                    df = filter_wall_hit(df, self.center_x, self.center_y, self.outer_radius,
+                                         self.pogobot_diameter_cm, self.pixel_diameter)
+                    print(f"   → after filter_wall_hit: {len(df)} rows")
+
+                    # Final guard
+                    if df is None or df.empty:
+                        print(f"🗑️ Discarded {csv_path} (empty after cleaning)")
+                        os.remove(csv_path)
+                        continue
+
+                    # Persist cleaned data
+                    df.to_csv(csv_path, index=False)
+                    print(f"✅ Cleaned {csv_path} (final={len(df)} rows)")
+
+                except Exception as e:
+                    print(f"❌ Problem reading {csv_path}: {e}")
 
     def run_all(self, pogobot: str = None):
         
@@ -375,7 +403,7 @@ class DynamicsProcessor:
             if pog not in self.video_map:
                 raise ValueError(f"Pogobot {pog} not found in workspace")
             self.process_runs(pog)
-    
+
     def check(self, pogobot: str = None):
 
         """
