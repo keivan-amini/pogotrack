@@ -16,6 +16,7 @@ import os
 import yaml
 import ffmpeg
 import pandas as pd
+import numpy as np
 
 from .cleaning import (
     should_discard_trajectory,
@@ -345,58 +346,69 @@ class DynamicsProcessor:
                     print(f"❌ Problem reading {csv_path}: {e}")
 
 
-    def extract_physics(self, pogobot: str = None):
-
+def extract_physics(self, pogobot: str = None):
+        
         """
-        Routine useful to extract relevant physical variables
-        from a generated pogobot .csv file, in order to
-        characterize the dynamics of pogobot.
+        Extract relevant physical variables for all trials of a given pogobot,
+        and save them into a single .csv file.
 
         Physical variables
         ------------------
-            1) angular velocity Ω of theta angle,
-            computed through FFT.
-            2) rough estimate of angular velocity Ω,
-            through the mean of the gradient dθ/dt.
-            3) pogobot linear velocity: computed
-            through the early slope of MSD(τ²).
-            4) radius of curvature: computed through
-            the fit of a circle over the arc 
-            depicted by the trajectory.
-            5) angular velocity ω associated with
-            the curvature, assuming a uniform circular
-            motion.
+            1) omega_fft   : angular velocity from FFT of theta.
+            2) omega_noise : angular velocity from mean dθ/dt.
+            3) v_msd       : linear velocity from MSD slope.
+            4) R           : radius of curvature from circle fit.
+            5) omega_ucm   : angular velocity assuming uniform circular motion.
 
-        Parameters:
+        Parameters
         ----------
             pogobot (str):
-                folder name associated with a certain pogobot,
-                example: 'pog_121'. Default is None (clean all
-                the pogobots' .csv generated files)
-
+                Folder name associated with a certain pogobot,
+                example: 'pog_121'.
         """
+
         pog_folder = os.path.join(self.folder_path, pogobot)
         if not os.path.exists(pog_folder):
             raise FileNotFoundError(f"No folder for pogobot {pogobot}")
 
+        results = []
+
         for pwm in self.tested_pwm:
             for trial in range(self.trials_per_pwm):
-                csv_path = f"{pogobot}_{pwm}_{trial}.csv"
-                csv_path = os.path.join(pog_folder, csv_path)
+                csv_path = os.path.join(pog_folder, f"{pogobot}_{pwm}_{trial}.csv")
                 if not os.path.exists(csv_path):
                     continue
 
                 try:
                     df = pd.read_csv(csv_path)
 
-                    compute_omega_fft(df)
-                    compute_omega_noise(df) TODO
-                    compute_v_msd(df, plot = False) TODO
-                    compute_radius(df, plot = False) TODO
-                    compute_omega_ucm(df) TODO
+                    omega_fft = compute_omega_fft(df)
+                    omega_noise = compute_omega_noise(df)
+                    v_msd = compute_v_msd(df, pwm=pwm, save_path=None)
+                    R = compute_radius(df, pogobot, pwm, trial, save_path=None)
+                    omega_ucm = v_msd / R if (v_msd is not None and R is not None) else np.nan
 
-                except:
-                    pass
+                    results.append({
+                        "pwm": pwm,
+                        "trial": trial,
+                        "omega_fft": omega_fft,
+                        "omega_noise": omega_noise,
+                        "v_msd": v_msd,
+                        "R": R,
+                        "omega_ucm": omega_ucm
+                    })
+
+                except Exception as e:
+                    print(f"⚠️ Skipping {pogobot} pwm={pwm} trial={trial} due to error: {e}")
+
+        if results:
+            df_results = pd.DataFrame(results)
+            save_path = os.path.join(pog_folder, f"{pogobot}_physics.csv")
+            df_results.to_csv(save_path, index=False)
+            print(f"✅ Saved physics results for {pogobot} to {save_path}")
+        else:
+            print(f"⚠️ No results extracted for {pogobot}")
+
 
 
     def run_all(self, pogobot: str = None):
