@@ -81,7 +81,7 @@ def trim_leading_trailing(df: pd.DataFrame):
     last_valid = df.index[~is_skipped].max()
     if pd.isna(first_valid) or pd.isna(last_valid):
         # no valid rows at all
-        return df.iloc[0:0]  
+        return df.iloc[0:0]
 
     return df.loc[first_valid:last_valid].reset_index(drop = True)
 
@@ -105,14 +105,17 @@ def interpolate_missing(df: pd.DataFrame):
     """
 
     df = df.copy()
-    is_skipped = (df[['x', 'y', 'theta']] == 0).all(axis=1)
-    df.loc[is_skipped, ['x', 'y', 'theta']] = np.nan # Replace skipped frame with NaN
-    df[['x', 'y', 'theta']] = df[['x', 'y', 'theta']].interpolate(method = 'linear')
-    df[['x', 'y', 'theta']] = df[['x', 'y', 'theta']].fillna(method='bfill').fillna(method = 'ffill')
+    mask = (df[['x', 'y', 'theta']] == 0).all(axis=1)
+    df.loc[mask, ['x', 'y', 'theta']] = np.nan
+    df[['x', 'y', 'theta']] = (
+        df[['x', 'y', 'theta']]
+        .interpolate(method="linear")
+        .bfill()
+        .ffill())
     return df
 
 
-def filter_trajectories(df: pd.DataFrame, cx, cy, radius):
+def filter_wall_hit(df: pd.DataFrame, cx, cy, radius):
 
     """
     Given a df containing variables of a pogobot
@@ -147,4 +150,3 @@ def filter_trajectories(df: pd.DataFrame, cx, cy, radius):
         cutoff_index = outside_indices[0]
         df = df.iloc[:cutoff_index]
     return df
-
