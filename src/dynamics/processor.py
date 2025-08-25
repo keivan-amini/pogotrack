@@ -17,12 +17,20 @@ import yaml
 import ffmpeg
 import pandas as pd
 
-from .utils import (
+from .cleaning import (
     should_discard_trajectory,
     trim_leading_trailing,
     interpolate_missing,
     filter_wall_hit,
     )
+
+from .physics import (
+    compute_omega_fft,
+    compute_omega_noise,
+    compute_v_msd,
+    compute_radius,
+    compute_omega_ucm,
+)
 
 from ..video_processing import VideoProcessor
 
@@ -336,6 +344,61 @@ class DynamicsProcessor:
                 except Exception as e:
                     print(f"❌ Problem reading {csv_path}: {e}")
 
+
+    def extract_physics(self, pogobot: str = None):
+
+        """
+        Routine useful to extract relevant physical variables
+        from a generated pogobot .csv file, in order to
+        characterize the dynamics of pogobot.
+
+        Physical variables
+        ------------------
+            1) angular velocity Ω of theta angle,
+            computed through FFT.
+            2) rough estimate of angular velocity Ω,
+            through the mean of the gradient dθ/dt.
+            3) pogobot linear velocity: computed
+            through the early slope of MSD(τ²).
+            4) radius of curvature: computed through
+            the fit of a circle over the arc 
+            depicted by the trajectory.
+            5) angular velocity ω associated with
+            the curvature, assuming a uniform circular
+            motion.
+
+        Parameters:
+        ----------
+            pogobot (str):
+                folder name associated with a certain pogobot,
+                example: 'pog_121'. Default is None (clean all
+                the pogobots' .csv generated files)
+
+        """
+        pog_folder = os.path.join(self.folder_path, pogobot)
+        if not os.path.exists(pog_folder):
+            raise FileNotFoundError(f"No folder for pogobot {pogobot}")
+
+        for pwm in self.tested_pwm:
+            for trial in range(self.trials_per_pwm):
+                csv_path = f"{pogobot}_{pwm}_{trial}.csv"
+                csv_path = os.path.join(pog_folder, csv_path)
+                if not os.path.exists(csv_path):
+                    continue
+
+                try:
+                    df = pd.read_csv(csv_path)
+
+                    compute_omega_fft(df)
+                    compute_omega_noise(df) TODO
+                    compute_v_msd(df, plot = False) TODO
+                    compute_radius(df, plot = False) TODO
+                    compute_omega_ucm(df) TODO
+
+                except:
+                    pass
+
+
     def run_all(self, pogobot: str = None):
         
         """
@@ -448,13 +511,26 @@ class DynamicsProcessor:
                 raise ValueError(f"Pogobot {pog} not found in workspace")
             self.clean_csv(pog)
 
-    def extract(self):
+    def extract(self, pogobot: str = None):
 
         """
-        Extract only physical variables from .csv datasets.
+        Extract only physical variables from .csv datasets,
+        to characterize the pogobot dynamics.
+
+        Parameters
+        ----------
+            pogobot (str):
+                folder name associated with a certain pogobot,
+                example: 'pog_121'. Default is None (extract
+                  all
+                the pogobots' .csv generated files)
         """
-        # TODO
-        pass
+        pogs_to_run = [pogobot] if pogobot else self.video_map.keys()
+
+        for pog in pogs_to_run:
+            if pog not in self.video_map:
+                raise ValueError(f"Pogobot {pog} not found in workspace")
+            self.extract_physics(pog)
 
     def plot(self):
 
