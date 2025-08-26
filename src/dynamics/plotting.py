@@ -38,16 +38,23 @@ def plot_msd(taus_sec_squared, msd, x_fit, reg, v_msd, pwm, save_path):
     """
 
     plt.figure(figsize=(8, 6))
-    plt.plot(taus_sec_squared, msd, label=r'MSD $(x,y)$ vs $\tau^2$')
-    plt.plot(x_fit, reg.predict(x_fit), '--', label=rf'Fit: $MSD \approx v^2 \cdot \tau^2$\n$v \approx {v_msd:.2f}$ cm/s')
-    plt.xlabel(r'Lag time squared $\tau^2$ (s$^2$)')
-    plt.ylabel(r'MSD (cm$^2$)')
-    plt.grid(True, alpha = 0.3)
+    plt.plot(taus_sec_squared, msd, label=r"MSD $(x,y)$ vs. $\tau^2$")
+    plt.plot(
+        x_fit,
+        reg.predict(x_fit),
+        "--",
+        label=rf"Fit: $MSD \approx v^2 \cdot \tau^2$"
+              rf"\\ $v \approx {v_msd:.2f}\,\mathrm{{cm/s}}$"
+    )
+    plt.xlabel(r"Lag time squared $\tau^2$ (s$^2$)")
+    plt.ylabel(r"MSD (cm$^2$)")
+    plt.grid(True, alpha=0.3)
     plt.legend()
-    plt.title(rf'Estimated velocity: PWM = {pwm}')
+    plt.title(rf"Estimated velocity: PWM = {pwm}")
     plt.tight_layout()
     if save_path:
-        plt.savefig(save_path, dpi = 400)
+        plt.savefig(save_path, dpi=400)
+    plt.close()
 
 
 def plot_circle_fit(pog_name, pwm, trial, t_min, t_max, x_data, y_data, xc, yc, R, save_path):
@@ -79,20 +86,34 @@ def plot_circle_fit(pog_name, pwm, trial, t_min, t_max, x_data, y_data, xc, yc, 
 
     _, ax = plt.subplots(figsize=(6, 6))
     ax.scatter(x_data, y_data, s=1)
-    ax.plot(x_data, y_data, 'b', label='Trajectory', lw=1)
+    ax.plot(x_data, y_data, "b", label="Trajectory", lw=1)
 
     theta = np.linspace(0, 2 * np.pi, 100)
     x_circle = xc + R * np.cos(theta)
     y_circle = yc + R * np.sin(theta)
 
-    plt.title(f"Pogobot = {pog_name.replace('pog_', '')}, PWM = {pwm}, Trial = {trial}, $t_1$ = {np.round(t_min,2)} $s$ and $t_2$ = {np.round(t_max,2)} $s$")
-    ax.plot(x_circle, y_circle, 'r--', label='Fitted Circle $ R = ' + str(np.round(R,2)) + "$ $cm$", lw = 1, alpha = 0.5)
+    plt.title(
+        rf"Pogobot = {pog_name.replace('pog_', '')}, "
+        rf"PWM = {pwm}, Trial = {trial}, "
+        rf"$t_1 = {np.round(t_min, 2)}\,s$, "
+        rf"$t_2 = {np.round(t_max, 2)}\,s$"
+    )
 
-    ax.set_xlabel("x (cm)")
-    ax.set_ylabel("y (cm)")
-    ax.axis('equal')
+    ax.plot(
+        x_circle,
+        y_circle,
+        "r--",
+        label=rf"Fitted Circle: $R = {np.round(R,2)}\,\mathrm{{cm}}$",
+        lw=1,
+        alpha=0.5,
+    )
+
+    ax.set_xlabel(r"$x$ (cm)")
+    ax.set_ylabel(r"$y$ (cm)")
+    ax.axis("equal")
     ax.grid(True)
     ax.legend()
 
     if save_path:
-        plt.show()
+        plt.savefig(save_path, dpi = 400)
+    plt.close()
