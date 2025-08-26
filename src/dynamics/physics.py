@@ -146,7 +146,12 @@ def compute_v_msd(df: pd.DataFrame,
 
     reg = LinearRegression().fit(x_fit, y_fit)
     slope = reg.coef_[0]
-    v_msd = np.sqrt(slope)  # final velocity estimate in cm/s
+
+    if slope < 0:
+        print(f"⚠️ Negative slope encountered (v_msd invalid), setting to 0")
+        v_msd = 0
+    else:
+        v_msd = np.sqrt(slope)
 
     if save_path:
         plot_msd(taus_sec_squared, msd, x_fit, reg, v_msd, pwm, save_path)
