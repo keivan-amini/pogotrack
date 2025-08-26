@@ -14,8 +14,8 @@ NAME_POGS:                    # Pogobot identifiers for dynamics extraction
 
 # === VIDEO CUTTING PARAMETERS ===
 RUN_DURATION: 6              # Duration (s) of each Pogobot run
-PAUSE_DURATION: 1.8          # Pause (s) between runs in combined video
-DEFAULT_START_TIME: 1         # Offset (s) before first run
+PAUSE_DURATION: 1.845       # Pause (s) between runs in combined video
+DEFAULT_START_TIME: 5.2        # Offset (s) before first run
 TESTED_PWM: [200, 400, 500, 600, 700, 800, 900, 950, 1023]
 TRIALS_PER_PWM: 10            # Trials for each predefined PWM
 
@@ -24,3 +24,16 @@ MIN_FRAMES: 100               # Min. number of frames per run
 CENTER_X: 1518                # Arena center X coordinate
 CENTER_Y: 1529                # Arena center Y coordinate
 OUTER_RADIUS: 1200            # Arena radius for filtering outer trajectories
+MIN_SECONDS: 4                # Acceptable minimum time for a video to analyze
+MAX_FRACTION_SKIPPED: 0.3     # Maximum fraction of skipped frame accepted
+MAX_SKIPPED_FRAMES: 4         # Maximum number of consecutive skipped frame accepted
+
+# === UNITS CONVERSION / TIMING === # a bit hardcoded :(
+FPS: 22.46             # Frames-per-second to convert frame index → time in seconds.
+POGOBOT_DIAMETER_CM: 4.975  # Pogobot physical diameter in centimeters.
+PIXEL_DIAMETER: 97.01       # Pogobot apparent diameter in pixels (calibration).
+
+# === EXTRACTION PARAMETERS === #
+MAX_TAU_SECONDS: 1.5
+TAUS_PERCENTAGE: 0.3
+T_SUBSET: 1
