@@ -23,25 +23,6 @@ def main():
     --mode check \
     --pogobot pog_84
 
-    To run in parallel from the terminal two pogobots:
-
-    /usr/bin/python3 -m src.dynamics.main \
-        --video_dir data/tpu \
-        --background data/tpu/bkg.bmp \
-        --dynconfig config/dynamics.yaml \
-        --processconfig config/default.yaml \
-        --mode process \
-        --pogobot pog_91 &
-
-    /usr/bin/python3 -m src.dynamics.main \
-        --video_dir data/tpu \
-        --background data/tpu/bkg.bmp \
-        --dynconfig config/dynamics.yaml \
-        --processconfig config/default.yaml \
-        --mode process \
-        --pogobot pog_95 &
-    wait
-
 
     TODO  
     
@@ -57,14 +38,18 @@ def main():
                         "Possible arguments: trim, process, check, clean, extract, plot, or complete")
     parser.add_argument("--pogobot", required = False, type = str,
                         help = "Focus only on one pogobot! Example: pog_191")
+    parser.add_argument("--plot", action = "store_true", help = "Enable plotting when using mode = extract")
     args = parser.parse_args()
+
+    if args.plot and args.mode != "extract":
+        parser.error("--plot can only be used when --mode = extract")
 
     print("Launching DynamicsProcessor...")
     processor = DynamicsProcessor(
         folder_path = args.video_dir,
         background_path = args.background,
         dyn_config_path = args.dynconfig,
-        processing_config_path = args.processconfig
+        processing_config_path = args.processconfig,
     )
 
     if args.mode == "trim":
@@ -80,13 +65,13 @@ def main():
         processor.clean(pogobot = args.pogobot)
     
     if args.mode == "extract":
-        processor.extract(pogobot = args.pogobot) #TODO
+        processor.extract(pogobot = args.pogobot, plot = args.plot)
     
     if args.mode == "plot":
         processor.plot(pogobot = args.pogobot) #TODO
 
     if args.mode == "complete":
-        processor.run_all(pogobot = args.pogobot)
+        processor.run_all(pogobot = args.pogobot) #TODO
 
 
 if __name__ == "__main__":
