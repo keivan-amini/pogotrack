@@ -70,6 +70,12 @@ class DynamicsProcessor:
     "MIN_SECONDS": 4,
     "MAX_FRACTION_SKIPPED": 0.3,
     "MAX_SKIPPED_FRAMES": 4,
+    "FPS": 22.46,
+    "POGOBOT_DIAMETER_CM": 4.975,
+    "PIXEL_DIAMETER": 97.01,
+    "MAX_TAU_SECONDS": 1.5,
+    "TAUS_PERCENTAGE": 0.1,
+    "T_SUBSET": 1,
     }
 
     def __init__(self, folder_path, background_path, dyn_config_path, processing_config_path):
@@ -346,8 +352,9 @@ class DynamicsProcessor:
                     print(f"❌ Problem reading {csv_path}: {e}")
 
 
-def extract_physics(self, pogobot: str = None):
-        
+    def extract_physics(self, pogobot: str = None,
+                        plot: bool = False):
+            
         """
         Extract relevant physical variables for all trials of a given pogobot,
         and save them into a single .csv file.
@@ -365,11 +372,25 @@ def extract_physics(self, pogobot: str = None):
             pogobot (str):
                 Folder name associated with a certain pogobot,
                 example: 'pog_121'.
+            plot (bool):
+                boolean flag aimed at saving MSD and radius
+                plots, by default in results/plots.
+                Default is False.
         """
 
         pog_folder = os.path.join(self.folder_path, pogobot)
         if not os.path.exists(pog_folder):
             raise FileNotFoundError(f"No folder for pogobot {pogobot}")
+
+        # --- Create results/plot/{pogobot} folder if plotting is enabled ---
+        results_plot_dir = None
+        if plot:
+            # go back two levels from self.folder_path
+            base_dir = os.path.abspath(os.path.join(self.folder_path, "..", ".."))
+            results_dir = os.path.join(base_dir, "results", "dynamics")
+            results_plot_dir = os.path.join(results_dir, "plot", pogobot)
+
+            os.makedirs(results_plot_dir, exist_ok = True)
 
         results = []
 
@@ -382,11 +403,29 @@ def extract_physics(self, pogobot: str = None):
                 try:
                     df = pd.read_csv(csv_path)
 
+                    # Default: no plotting
+                    results_msd_path = None
+                    results_r_path = None
+
+                    # If plotting enabled, build the paths
+                    if plot and results_plot_dir:
+                        results_msd_path = os.path.join(
+                            results_plot_dir, f"{pogobot}_{pwm}_{trial}_msd.png"
+                        )
+                        results_r_path = os.path.join(
+                            results_plot_dir, f"{pogobot}_{pwm}_{trial}_r.png"
+                        )
+
                     omega_fft = compute_omega_fft(df)
                     omega_noise = compute_omega_noise(df)
-                    v_msd = compute_v_msd(df, pwm=pwm, save_path=None)
-                    R = compute_radius(df, pogobot, pwm, trial, save_path=None)
-                    omega_ucm = v_msd / R if (v_msd is not None and R is not None) else np.nan
+                    v_msd = compute_v_msd(
+                        df, self.max_tau_seconds, self.taus_percentage,
+                        pwm=pwm, save_path=results_msd_path
+                    )
+                    R = compute_radius(
+                        df, self.t_subset, results_r_path, pogobot, pwm, trial
+                    )
+                    omega_ucm = compute_omega_ucm(v_msd, R)
 
                     results.append({
                         "pwm": pwm,
@@ -403,7 +442,7 @@ def extract_physics(self, pogobot: str = None):
 
         if results:
             df_results = pd.DataFrame(results)
-            save_path = os.path.join(pog_folder, f"{pogobot}_physics.csv")
+            save_path = os.path.join(results_dir, f"{pogobot}_physics.csv")
             df_results.to_csv(save_path, index=False)
             print(f"✅ Saved physics results for {pogobot} to {save_path}")
         else:
@@ -523,7 +562,8 @@ def extract_physics(self, pogobot: str = None):
                 raise ValueError(f"Pogobot {pog} not found in workspace")
             self.clean_csv(pog)
 
-    def extract(self, pogobot: str = None):
+    def extract(self, pogobot: str = None,
+                plot: bool = False):
 
         """
         Extract only physical variables from .csv datasets,
@@ -533,16 +573,18 @@ def extract_physics(self, pogobot: str = None):
         ----------
             pogobot (str):
                 folder name associated with a certain pogobot,
-                example: 'pog_121'. Default is None (extract
-                  all
-                the pogobots' .csv generated files)
+                example: 'pog_121'. Default is None (extract all
+                the pogobots' .csv generated files).
+            plot (bool):
+                boolean flag aimed at saving plots or not.
+                Default is False.
         """
         pogs_to_run = [pogobot] if pogobot else self.video_map.keys()
 
         for pog in pogs_to_run:
             if pog not in self.video_map:
                 raise ValueError(f"Pogobot {pog} not found in workspace")
-            self.extract_physics(pog)
+            self.extract_physics(pog, plot)
 
     def plot(self):
 
