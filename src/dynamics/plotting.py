@@ -4,11 +4,12 @@ at the study of the pogobots' characterization
 dynamics.
 """
 
-
 import matplotlib.pyplot as plt
 from matplotlib import rc
 import numpy as np
+import pandas as pd
 
+# LaTex rendering because it's nicer ;)
 rc("text", usetex=True)
 rc("font", family="serif")
 
@@ -116,4 +117,61 @@ def plot_circle_fit(pog_name, pwm, trial, t_min, t_max, x_data, y_data, xc, yc, 
 
     if save_path:
         plt.savefig(save_path, dpi = 400)
+    plt.close()
+
+
+def plot_quantity(df: pd.DataFrame, pog_name: str,
+                  name_pogs: list, save_path: str,
+                  quantity: str, plot_config: dict):
+    """
+    Save plots regarding:
+
+        1) angular velocity from FFT of theta
+            as a function of pwm.
+        2) linear velocity from MSD slope as
+            a function of pwm.
+        3) radius of curvature from circle fit
+            trajectory as a function of pwm.
+        4) angular velocity of trajectory as
+            a function of pwm.
+    
+    Parameters
+    ----------
+        df (pd.DataFrame):
+            df containing column 'pwm' and 'v_msd'. 
+        pog_name (str):
+            string (folder) containing the pogobot
+            id related to the plot. 
+        name_pogs (list):
+            list containing all the pogobot id's in 
+            the dynamics characterization. useful 
+            to assign unique colors. 
+        save_path (str):
+            path to save the generated plot.
+    """
+
+    if quantity not in plot_config:
+        raise ValueError(f"Unsupported quantity: {quantity}")
+
+    config = plot_config[quantity]
+    symbol, unit, ylim = config["symbol"], config["unit"], config["ylim"]
+
+    color_map = plt.cm.get_cmap('viridis', len(name_pogs))
+    pogobot_colors = {name_pogs[i]: color_map(i) for i in range(len(name_pogs))}
+    color = pogobot_colors[pog_name]
+
+    all_pwm = df['pwm'].unique()
+
+    plt.figure(figsize=(7, 5))
+    plt.scatter(df["pwm"], df[quantity],
+                s = 20, color = color, alpha = 0.6, marker= "X")
+    if ylim:
+        plt.ylim(*ylim)
+    plt.grid(True, alpha=0.15, axis="x")
+    plt.xlabel("PWM duty cycle")
+    plt.ylabel(f"{symbol} {unit}")
+    plt.xticks(all_pwm)
+    plt.title(f"{symbol} vs PWM — ID: {pog_name.replace('pog_', '')}")
+    plt.tight_layout()
+    plt.savefig(save_path + ".pdf", dpi = 400, format="pdf")
     plt.close()
