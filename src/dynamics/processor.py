@@ -16,7 +16,6 @@ import os
 import yaml
 import ffmpeg
 import pandas as pd
-import numpy as np
 
 from .cleaning import (
     should_discard_trajectory,
@@ -31,6 +30,10 @@ from .physics import (
     compute_v_msd,
     compute_radius,
     compute_omega_ucm,
+)
+
+from .plotting import (
+    plot_quantity
 )
 
 from ..video_processing import VideoProcessor
@@ -443,12 +446,60 @@ class DynamicsProcessor:
         if results:
             df_results = pd.DataFrame(results)
             save_path = os.path.join(results_dir, f"{pogobot}_physics.csv")
-            df_results.to_csv(save_path, index=False)
+            df_results.to_csv(save_path, index = False)
             print(f"✅ Saved physics results for {pogobot} to {save_path}")
         else:
             print(f"⚠️ No results extracted for {pogobot}")
 
 
+    def plot_physics(self, pogobot: str = None):
+
+        """
+
+        Given a pogobot (folder) name, plot the .csv
+        dataset corresponding to the saved physical
+        variables related to the characterization dynamics:
+
+        | pwm | trial | omega_fft | omega_noise | v_msd |    R   | omega_ucm |
+        |-----|-------|-----------|-------------|-------|--------|-----------|
+        | 200 |   0   |   1.045   |    0.001    | 0.057 |  0.036 |   1.582   |
+        | 200 |   1   |   2.091   |   -0.007    | 0.060 |  0.036 |   1.666   |
+        | ... |  ...  |    ...    |     ...     |   ... |   ...  |    ...    |
+
+        mainly as a function of the pwm. Plot both collective statistics
+        and individual one, per pogobot.
+
+        Save plots regarding:
+
+            1) angular velocity from FFT of theta
+                as a function of pwm.
+            2) linear velocity from MSD slope as
+                a function of pwm.
+            3) radius of curvature from circle fit
+                trajectory as a function of pwm.
+            4) angular velocity of trajectory as
+                a function of pwm.
+        
+        Parameters
+        ----------
+            pogobot (str):
+                Folder name associated with a certain pogobot,
+                example: 'pog_121'.
+        """
+
+        base_dir = os.path.abspath(os.path.join(self.folder_path, "..", ".."))
+        csv_dir = os.path.join(base_dir, "results", "dynamics", pogobot + "_physics.csv")
+        plot_path = os.path.join(base_dir, "results", "dynamics", "plot", pogobot, pogobot)
+        try:
+            df = pd.read_csv(csv_dir)
+            for quantity in self.plotting.keys():
+                save_path = f"{plot_path}_{quantity}"
+                plot_quantity(df, pogobot, self.name_pogs, save_path, quantity, self.plotting)
+        except Exception as e:
+            print(f"⚠️ Skipping {pogobot} due to error: {e}")
+
+
+# --- Commands directly launched from CLI --- #
 
     def run_all(self, pogobot: str = None):
         
@@ -586,11 +637,23 @@ class DynamicsProcessor:
                 raise ValueError(f"Pogobot {pog} not found in workspace")
             self.extract_physics(pog, plot)
 
-    def plot(self):
+
+    def plot(self, pogobot: str = None):
 
         """
-        Plot only.
+        Launch all plot routines assoicated to
+        pogobots' characterization dynamics.
+
+        Parameters
+        ----------
+            pogobot (str):
+                folder name associated with a certain pogobot,
+                example: 'pog_121'. Default is None (extract all
+                the pogobots' .csv generated files).
         """
 
-        # TODO
-        pass
+        pogs_to_run = [pogobot] if pogobot else self.video_map.keys()
+        for pog in pogs_to_run:
+            if pog not in self.video_map:
+                raise ValueError(f"Pogobot {pog} not found in workspace")
+            self.plot_physics(pog)
