@@ -37,3 +37,22 @@ PIXEL_DIAMETER: 97.01       # Pogobot apparent diameter in pixels (calibration).
 MAX_TAU_SECONDS: 1.5
 TAUS_PERCENTAGE: 0.3
 T_SUBSET: 1
+
+# === PLOTTING PARAMETERS === #
+plotting:
+  v_msd:
+    symbol: "$v_{MSD}$"
+    unit: "(cm/s)"
+    ylim: [-0.3, 9]
+  omega_fft:
+    symbol: "$\\Omega_{FFT}$"
+    unit: "(rad/s)"
+    ylim: null
+  omega_ucm:
+    symbol: "$\\Omega_{UCM} = v_{MSD} / R$"
+    unit: "(rad/s)"
+    ylim: null
+  R:
+    symbol: "$R$"
+    unit: "(cm)"
+    ylim: [-1, 200]
