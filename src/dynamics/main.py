@@ -16,12 +16,12 @@ def main():
     Example:
 
     /usr/bin/python3 -m src.dynamics.main \
-    --video_dir data/tpu \
-    --background data/tpu/bkg.bmp \
-    --dynconfig config/dynamics.yaml \
-    --processconfig config/default.yaml \
-    --mode check \
-    --pogobot pog_84
+        --video_dir data/tpu \
+        --background data/tpu/bkg.bmp \
+        --dynconfig config/dynamics.yaml \
+        --processconfig config/default.yaml \
+        --mode extract --plot \
+        --pogobot pog_88
 
 
     TODO  
