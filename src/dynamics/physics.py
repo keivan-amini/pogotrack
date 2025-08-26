@@ -86,8 +86,9 @@ def compute_omega_noise(df: pd.DataFrame):
 def compute_v_msd(df: pd.DataFrame,
                   max_tau_seconds: float = 2.0,
                   taus_percentage: float = 0.3,
-                  plot: bool = False,
-                  pwm: int = None):
+                  pwm: int = None,
+                  save_path: str = None,
+                  ):
     
     """
     Estimate the linear velocity of a pogobot from its trajectory
@@ -108,8 +109,8 @@ def compute_v_msd(df: pd.DataFrame,
         taus_percentage (float):
             fraction of the smallest lag times used for the 
             linear fit. Default is 0.3.
-        plot (bool):
-            if True, plot the MSD curve and linear fit. Default False.
+        save_path (str):
+            path to save the plotted MSD curve and linear fit. Default None.
         pwm (int):
             PWM value, used only for labeling plots. Default None.
 
@@ -147,8 +148,8 @@ def compute_v_msd(df: pd.DataFrame,
     slope = reg.coef_[0]
     v_msd = np.sqrt(slope)  # final velocity estimate in cm/s
 
-    if plot:
-        plot_msd(taus_sec_squared, msd, x_fit, reg.predict(x_fit), v_msd, pwm)
+    if save_path:
+        plot_msd(taus_sec_squared, msd, x_fit, reg, v_msd, pwm, save_path)
 
     return v_msd
 
@@ -222,8 +223,7 @@ def compute_radius(df: pd.DataFrame,
                    save_path: str = None,
                    pog_name: str = None,
                    pwm: int = None,
-                   trial: int = None,
-                   plot: bool = False):
+                   trial: int = None):
     """
     Estimate the local radius of curvature of a trajectory
     by fitting a circle over a temporal subset around the
@@ -245,8 +245,6 @@ def compute_radius(df: pd.DataFrame,
             pwm value, only used for plotting. Default None.
         trial (int):
             trial index, only used for plotting. Default None.
-        plot (bool):
-            boolean variable useful to save the plotted result.
 
     Return
     ------
@@ -263,7 +261,7 @@ def compute_radius(df: pd.DataFrame,
 
     xc, yc, R = fit_circle(x_subset, y_subset)
 
-    if plot:
+    if save_path:
         plot_circle_fit(pog_name, pwm, trial, t_min, t_max,
                         x_subset, y_subset, xc, yc, R, save_path)
 
