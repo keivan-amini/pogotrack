@@ -47,7 +47,7 @@ plotting:
   omega_fft:
     symbol: "$\\Omega_{FFT}$"
     unit: "(rad/s)"
-    ylim: null
+    ylim: [-0.3, 5]
   omega_ucm:
     symbol: "$\\Omega_{UCM} = v_{MSD} / R$"
     unit: "(rad/s)"
@@ -56,3 +56,7 @@ plotting:
     symbol: "$R$"
     unit: "(cm)"
     ylim: [-1, 200]
+  omega_noise:
+    symbol: "$\\langle | \\Omega_{N} | \\rangle $"
+    unit: "(rad/s)"
+    ylim: [-0.3, 5]
