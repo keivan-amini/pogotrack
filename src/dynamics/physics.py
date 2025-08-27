@@ -9,6 +9,7 @@ import pandas as pd
 import numpy as np
 from sklearn.linear_model import LinearRegression
 from scipy.fft import fft, fftfreq
+from scipy.signal import butter, filtfilt
 from scipy.optimize import least_squares
 
 
@@ -18,34 +19,96 @@ from .plotting import (
 )
 
 
+### --- Signal Processing functions --- ###
 
-def compute_omega_fft(df: pd.DataFrame):
+def butter_lowpass(cutoff: float, fs: float, order: int = 4):
 
     """
-    Given a pogobot dataframe, get a measure
-    of the angular velocity associated to the theta
-    angle using a Fast Fourier Transform approach.
+    Design a low-pass Butterworth filter.
+
+    Parameters
+    ----------
+        cutoff (float):
+            cutoff frequency of the filter in Hz.
+        fs (float):
+            sampling frequency in Hz.
+        order (int):
+            filter order, higher values mean sharper cutoff. Default is 4.
+
+    Return
+    ------
+        b, a (ndarray):
+            filter coefficients.
+    """
+
+    nyquist = 0.5 * fs
+    normal_cutoff = cutoff / nyquist
+    b, a = butter(order, normal_cutoff, btype= 'low', analog=False)
+    return b, a
+
+
+def butter_lowpass_filter(data: np.ndarray, cutoff: float, fs: float, order: int = 4):
+
+    """
+    Apply a low-pass Butterworth filter to an input signal.
+
+    Parameters
+    ----------
+        data (ndarray):
+            input signal to be filtered.
+        cutoff (float):
+            cutoff frequency in Hz.
+        fs (float):
+            sampling frequency in Hz.
+        order (int):
+            filter order. Default is 4.
+
+    Return
+    ------
+        y (ndarray):
+            filtered signal.
+    """
+
+    b, a = butter_lowpass(cutoff, fs, order)
+    y = filtfilt(b, a, data)
+    return y
+
+
+### --- Physics observables functions --- ###
+
+def compute_omega_fft(df: pd.DataFrame,
+                      cutoff: float = 1.0,
+                      order: int = 4):
+    """
+    Given a pogobot dataframe, get a measure of the angular velocity
+    associated to the theta angle using a Fast Fourier Transform approach.
+    A low-pass Butterworth filter is applied before FFT to reduce noise.
 
     Parameters
     ----------
         df (pd.DataFrame):
             loaded .csv dataframe in pandas containing
             time, x, y, theta columns.
+        cutoff (float):
+            cutoff frequency of the low-pass filter in Hz. Default is 1.0.
+        order (int):
+            order of the Butterworth filter. Default is 4.
 
     Return
     ------
         omega_fft (float):
             angular velocity associated to theta angle
-            computed through FFT.
-
+            computed through FFT, in rad/s.
     """
 
     time = df['time'].values
     theta_deg = df['theta'].values
     theta_rad = np.deg2rad(theta_deg)
+    dt = np.mean(np.diff(time))
+    fs = 1.0 / dt
     steps = len(time)
-    dt = np.mean(np.diff(time))  # assume roughly constant timestep
-    fft_vals = fft(theta_rad)
+    theta_rad_filt = butter_lowpass_filter(theta_rad, cutoff, fs, order)
+    fft_vals = fft(theta_rad_filt)
     freqs = fftfreq(steps, dt)
     fft_power = np.abs(fft_vals)**2
     idx_peak = np.argmax(fft_power[1:steps // 2]) + 1
@@ -79,7 +142,7 @@ def compute_omega_noise(df: pd.DataFrame):
 
     theta_rad = np.unwrap(np.deg2rad(df['theta'].values))
     dtheta_dt = np.gradient(theta_rad, time)
-    omega_noise = np.mean(dtheta_dt)
+    omega_noise = np.abs(np.mean(dtheta_dt))
     return omega_noise
 
 
