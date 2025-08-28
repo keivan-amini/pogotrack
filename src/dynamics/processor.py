@@ -10,7 +10,6 @@ the whole video and obtain different dataset for each run.
 """
 
 ## at the moment focusing on a situation where just one pogobot is in the arena
-## implement CLI !
 
 import os
 import yaml
@@ -33,7 +32,11 @@ from .physics import (
 )
 
 from .plotting import (
-    plot_quantity
+    plot_msd_all,
+    plot_msd_trials,
+    plot_quantity,
+    plot_msd_grid,
+    plot_circle_fit_grid,
 )
 
 from ..video_processing import VideoProcessor
@@ -387,17 +390,20 @@ class DynamicsProcessor:
 
         # --- Create results/plot/{pogobot} folder if plotting is enabled ---
         results_plot_dir = None
+        base_dir = os.path.abspath(os.path.join(self.folder_path, "..", ".."))
+        results_dir = os.path.join(base_dir, "results", "dynamics")
         if plot:
-            # go back two levels from self.folder_path
-            base_dir = os.path.abspath(os.path.join(self.folder_path, "..", ".."))
-            results_dir = os.path.join(base_dir, "results", "dynamics")
             results_plot_dir = os.path.join(results_dir, "plot", pogobot)
-
-            os.makedirs(results_plot_dir, exist_ok = True)
+            os.makedirs(results_plot_dir, exist_ok=True)
 
         results = []
+        all_trials_per_pwm = {}
+        all_circles_per_pwm = {}
 
         for pwm in self.tested_pwm:
+            trials_data = []  # collect MSD data for this pwm
+            circle_trials_data = [] #collect R data for this pwm
+
             for trial in range(self.trials_per_pwm):
                 csv_path = os.path.join(pog_folder, f"{pogobot}_{pwm}_{trial}.csv")
                 if not os.path.exists(csv_path):
@@ -406,28 +412,27 @@ class DynamicsProcessor:
                 try:
                     df = pd.read_csv(csv_path)
 
-                    # Default: no plotting
-                    results_msd_path = None
+                    # If plotting enabled, set paths for radius fit plot
                     results_r_path = None
-
-                    # If plotting enabled, build the paths
                     if plot and results_plot_dir:
-                        results_msd_path = os.path.join(
-                            results_plot_dir, f"{pogobot}_{pwm}_{trial}_msd.png"
-                        )
                         results_r_path = os.path.join(
                             results_plot_dir, f"{pogobot}_{pwm}_{trial}_r.png"
                         )
 
+                    # Compute physical quantities
+                    trial_data = compute_v_msd(df, self.max_tau_seconds,
+                                            self.taus_percentage)
+                    v_msd = trial_data["v_msd"]
+
                     omega_fft = compute_omega_fft(df)
                     omega_noise = compute_omega_noise(df)
-                    v_msd = compute_v_msd(
-                        df, self.max_tau_seconds, self.taus_percentage,
-                        pwm=pwm, save_path=results_msd_path
-                    )
-                    R = compute_radius(
-                        df, self.t_subset, results_r_path, pogobot, pwm, trial
-                    )
+                    
+                    circle_trial_data =  compute_radius(df, self.t_subset,
+                                                        results_r_path, pogobot,
+                                                        pwm, trial)
+
+                    R = circle_trial_data["R"]
+
                     omega_ucm = compute_omega_ucm(v_msd, R)
 
                     results.append({
@@ -440,13 +445,38 @@ class DynamicsProcessor:
                         "omega_ucm": omega_ucm
                     })
 
+                    # Store MSD data for overlay plotting
+                    trials_data.append(trial_data)
+                    circle_trials_data.append(circle_trial_data)
+
                 except Exception as e:
                     print(f"⚠️ Skipping {pogobot} pwm={pwm} trial={trial} due to error: {e}")
+            
 
+            all_trials_per_pwm[pwm] = trials_data
+            all_circles_per_pwm[pwm] = circle_trials_data
+
+
+            # --- After all trials for this PWM, plot overlay if requested ---
+            if plot and results_plot_dir:
+                combined_path = os.path.join(
+                    results_plot_dir, f"{pogobot}_{pwm}_all_trials_msd"
+                )
+                plot_msd_trials(trials_data, pwm, combined_path)
+
+        if plot and results_plot_dir:
+            grid_path = os.path.join(results_plot_dir, f"{pogobot}_all_pwm_msd")
+            all_msd_path = os.path.join(results_plot_dir, f"{pogobot}_all_msd")
+            circle_grid_path = os.path.join(results_plot_dir, f"{pogobot}_all_pwm_R")
+            plot_msd_grid(all_trials_per_pwm, save_path=grid_path)
+            plot_msd_all(all_trials_per_pwm, save_path=all_msd_path)
+            plot_circle_fit_grid(all_circles_per_pwm, circle_grid_path)
+
+        # --- Save physics results for all pwm/trials ---
         if results:
             df_results = pd.DataFrame(results)
             save_path = os.path.join(results_dir, f"{pogobot}_physics.csv")
-            df_results.to_csv(save_path, index = False)
+            df_results.to_csv(save_path, index=False)
             print(f"✅ Saved physics results for {pogobot} to {save_path}")
         else:
             print(f"⚠️ No results extracted for {pogobot}")
