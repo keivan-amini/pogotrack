@@ -14,7 +14,6 @@ from scipy.optimize import least_squares
 
 
 from .plotting import (
-    plot_msd,
     plot_circle_fit,
 )
 
@@ -148,11 +147,7 @@ def compute_omega_noise(df: pd.DataFrame):
 
 def compute_v_msd(df: pd.DataFrame,
                   max_tau_seconds: float = 2.0,
-                  taus_percentage: float = 0.3,
-                  pwm: int = None,
-                  save_path: str = None,
-                  ):
-    
+                  taus_percentage: float = 0.3):
     """
     Estimate the linear velocity of a pogobot from its trajectory
     using the mean-squared displacement (MSD) method.
@@ -164,25 +159,25 @@ def compute_v_msd(df: pd.DataFrame,
     Parameters
     ----------
         df (pd.DataFrame):
-            loaded .csv dataframe in pandas containing
+            Loaded .csv dataframe in pandas containing
             time, x, y, theta columns.
         max_tau_seconds (float):
-            maximum lag time (in seconds) to consider for MSD
+            Maximum lag time (in seconds) to consider for MSD
             computation. Default is 2.0.
         taus_percentage (float):
-            fraction of the smallest lag times used for the 
+            Fraction of the smallest lag times used for the 
             linear fit. Default is 0.3.
-        save_path (str):
-            path to save the plotted MSD curve and linear fit. Default None.
-        pwm (int):
-            PWM value, used only for labeling plots. Default None.
 
     Return
     ------
-        v_msd (float):
-            estimated pogobot linear velocity in cm/s.
+        dict:
+            A dictionary containing:
+            - v_msd (float): estimated pogobot linear velocity in cm/s.
+            - taus_sec_squared (np.ndarray): τ² values (s²).
+            - msd (np.ndarray): mean squared displacement (cm²).
+            - x_fit (np.ndarray): τ² values used for the regression fit.
+            - reg (LinearRegression): fitted regression model.
     """
-
     x = df['x'].values
     y = df['y'].values
     time = df['time'].values
@@ -216,10 +211,13 @@ def compute_v_msd(df: pd.DataFrame,
     else:
         v_msd = np.sqrt(slope)
 
-    if save_path:
-        plot_msd(taus_sec_squared, msd, x_fit, reg, v_msd, pwm, save_path)
-
-    return v_msd
+    return {
+        "v_msd": v_msd,
+        "taus_sec_squared": taus_sec_squared,
+        "msd": msd,
+        "x_fit": x_fit,
+        "reg": reg,
+    }
 
 def fit_circle(x, y):
 
@@ -329,11 +327,22 @@ def compute_radius(df: pd.DataFrame,
 
     xc, yc, R = fit_circle(x_subset, y_subset)
 
-    if save_path:
-        plot_circle_fit(pog_name, pwm, trial, t_min, t_max,
-                        x_subset, y_subset, xc, yc, R, save_path)
+    #if save_path:
+        #plot_circle_fit(pog_name, pwm, trial, t_min, t_max,
+                        #x_subset, y_subset, xc, yc, R, save_path) NON SALVARE AL MOMENTO I PLOT RADIUS SINGOLI
 
-    return R
+    trial_dict = {
+        "trial": trial,
+        "t_min": t_min,
+        "t_max": t_max,
+        "x_data": x_subset,
+        "y_data": y_subset,
+        "xc": xc,
+        "yc": yc,
+        "R": R
+    }
+
+    return trial_dict
 
 def compute_omega_ucm(v_msd: float, R: float) -> float:
 
