@@ -530,7 +530,7 @@ class DynamicsProcessor:
     def run_all(self, pogobot: str = None):
         
         """
-        Run full pipeline: trim + process for all pogobots found.
+        Run full pipeline for all pogobots found.
         If pogobot is provided, only run the full pipeline for him.
 
         Parameters
@@ -549,7 +549,11 @@ class DynamicsProcessor:
 
             video_path = self.video_map[pog]
             self.trim_pogobot_runs(pog, video_path)
-            self.process_runs(pog) # add the new methods: check, clean, extract, plot
+            self.process_runs(pog)
+            self.check_csv(pog)
+            self.clean_csv(pog)
+            self.extract_physics(pog)
+            self.plot_physics(pog)
 
     def trim(self, pogobot: str = None):
 
