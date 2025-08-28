@@ -73,7 +73,6 @@ class DynamicsProcessor:
     "CENTER_X": 1518,
     "CENTER_Y": 1529,
     "OUTER_RADIUS": 1200,
-    "MIN_SECONDS": 4,
     "MAX_FRACTION_SKIPPED": 0.3,
     "MAX_SKIPPED_FRAMES": 4,
     "FPS": 22.46,
@@ -276,9 +275,6 @@ class DynamicsProcessor:
                 output_csv = video_path.replace(".mp4", ".csv")
                 try:
                     df = pd.read_csv(output_csv)
-                    last_time = df["time"].iloc[-1]
-                    if last_time < self.min_seconds: #UPDATE: with the video porcessing skipping frame procedure, this does not make sense anymore
-                        print(f"❌ Problems found with the following video: {video_path}: {round(last_time, 2)} s")
                 except:
                     print(f"❌ Problems found with the following video: {output_csv}: not found.")
 
