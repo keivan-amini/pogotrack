@@ -24,7 +24,6 @@ MIN_FRAMES: 100               # Min. number of frames per run
 CENTER_X: 1518                # Arena center X coordinate
 CENTER_Y: 1529                # Arena center Y coordinate
 OUTER_RADIUS: 1200            # Arena radius for filtering outer trajectories
-MIN_SECONDS: 4                # Acceptable minimum time for a video to analyze
 MAX_FRACTION_SKIPPED: 0.3     # Maximum fraction of skipped frame accepted
 MAX_SKIPPED_FRAMES: 4         # Maximum number of consecutive skipped frame accepted
 
@@ -51,11 +50,11 @@ plotting:
   omega_ucm:
     symbol: "$\\Omega_{UCM} = v_{MSD} / R$"
     unit: "(rad/s)"
-    ylim: null
+    ylim: [-0.3, 5]
   R:
     symbol: "$R$"
     unit: "(cm)"
-    ylim: [-1, 200]
+    ylim: [-10, 200]
   omega_noise:
     symbol: "$\\langle | \\Omega_{N} | \\rangle $"
     unit: "(rad/s)"
