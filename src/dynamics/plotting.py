@@ -8,54 +8,12 @@ import matplotlib.pyplot as plt
 from matplotlib import rc
 import numpy as np
 import pandas as pd
+import matplotlib.cm as cm
 
 # LaTex rendering because it's nicer ;)
 rc("text", usetex=True)
 rc("font", family="serif")
 
-
-def plot_msd(taus_sec_squared, msd, x_fit, reg, v_msd, pwm, save_path):
-
-    """
-    Plot the mean-squared displacement (MSD) curve against lag time squared,
-    together with the linear regression fit used to estimate velocity.
-
-    Parameters
-    ----------
-    taus_sec_squared : np.ndarray
-        Lag times squared (τ²) in seconds².
-    msd : np.ndarray
-        Mean squared displacement values (cm²).
-    x_fit : np.ndarray
-        Subset of τ² values used for the linear regression fit.
-    reg : sklearn.linear_model.LinearRegression
-        Fitted regression model.
-    v_msd : float
-        Estimated velocity (cm/s) from the MSD slope.
-    pwm : int
-        PWM value associated with the trajectory, used in plot title.
-    save_path : str or None
-        If not None, path where the figure will be saved.
-    """
-
-    plt.figure(figsize=(8, 6))
-    plt.plot(taus_sec_squared, msd, label=r"MSD $(x,y)$ vs. $\tau^2$")
-    plt.plot(
-        x_fit,
-        reg.predict(x_fit),
-        "--",
-        label=rf"Fit: $MSD \approx v^2 \cdot \tau^2$"
-              rf"\\ $v \approx {v_msd:.2f}\,\mathrm{{cm/s}}$"
-    )
-    plt.xlabel(r"Lag time squared $\tau^2$ (s$^2$)")
-    plt.ylabel(r"MSD (cm$^2$)")
-    plt.grid(True, alpha=0.3)
-    plt.legend()
-    plt.title(rf"Estimated velocity: PWM = {pwm}")
-    plt.tight_layout()
-    if save_path:
-        plt.savefig(save_path, dpi=400)
-    plt.close()
 
 
 def plot_circle_fit(pog_name, pwm, trial, t_min, t_max, x_data, y_data, xc, yc, R, save_path):
@@ -128,6 +86,9 @@ def plot_quantity(df: pd.DataFrame, pog_name: str,
 
         1) angular velocity from FFT of theta
             as a function of pwm.
+        2) noisy angular velocity computed as
+            the mean of the derivative of
+            theta over time, as a function of pwm.
         2) linear velocity from MSD slope as
             a function of pwm.
         3) radius of curvature from circle fit
@@ -175,3 +136,285 @@ def plot_quantity(df: pd.DataFrame, pog_name: str,
     plt.tight_layout()
     plt.savefig(save_path + ".pdf", dpi = 400, format="pdf")
     plt.close()
+
+
+def plot_msd_trials(trials_data, pwm, save_path=None):
+    
+    """
+    Plot overlay of MSD curves and linear fits for all trials
+    of a given PWM.
+
+    Parameters
+    ----------
+    trials_data (list of dict):
+        List of dictionaries returned by compute_v_msd(), one per trial.
+    pwm (int):
+        PWM value, used for labeling the plot.
+    save_path (str or None):
+        If not None, path where the figure will be saved.
+    """
+
+    plt.figure(figsize=(4, 3))
+
+    for i, trial_data in enumerate(trials_data):
+        taus = trial_data["taus_sec_squared"]
+        msd = trial_data["msd"]
+        x_fit = trial_data["x_fit"]
+        reg = trial_data["reg"]
+        v_msd = trial_data["v_msd"]
+
+        plt.plot(taus, msd, alpha = 0.6, label=f"Trial {i}: MSD", color = "skyblue")
+        plt.plot(x_fit, reg.predict(x_fit), alpha = 0.3,
+                color = "steelblue")
+
+        #label=fr"Trial {i}: $v\approx {v_msd:.2f}\,\mathrm{{cm/s}}$"
+
+    plt.xlabel(r"$\tau^2$ (s$^2$)")
+    plt.ylabel(r"MSD (cm$^2$)")
+    plt.ylim(0, 100)
+    plt.title(rf"PWM = {pwm}")
+    plt.tight_layout()
+
+    if save_path:
+        plt.savefig(save_path + ".pdf", dpi = 400, format="pdf")
+    plt.close()
+
+
+### --- subplots sections --- #
+
+def plot_msd_grid(all_trials_per_pwm: dict,
+                  save_path: str = None):
+    """
+    Generate a single figure with MSD curves and fits for all PWM values
+    of a given pogobot, arranged in a grid of subplots.
+
+    Each subplot corresponds to one PWM and overlays MSD curves across
+    all its trials, together with the linear fits used to estimate v_msd.
+
+    Parameters
+    ----------
+    all_trials_per_pwm (dict):
+        Dictionary mapping PWM values to lists of trial_data dicts.
+        Each trial_data should come from `compute_v_msd` and contain
+        {"taus_sec_squared", "msd", "x_fit", "reg", "v_msd"}.
+    save_path (str):
+        Path to save the combined figure. If None, the figure is not saved.
+    """
+    n_pwms = len(all_trials_per_pwm)
+    ncols = 5
+    nrows = int(np.ceil(n_pwms / ncols))
+
+    fig, axes = plt.subplots(nrows, ncols,
+                             figsize=(2 * ncols, 2 * nrows),
+                             sharex=False, sharey=True)
+    axes = axes.flatten()
+    plt.subplots_adjust(hspace = 0.5, bottom=0.15)
+
+    for ax in axes:
+        ax.axis("off")
+        ax.set_ylim(-10, 100)
+
+    last_row_pwms = n_pwms % ncols if n_pwms % ncols != 0 else ncols
+    shift_frac = (ncols - last_row_pwms) / (2 * ncols) - 0.014 # fraction of figure width to shift
+
+    for i, (pwm, trials_data) in enumerate(all_trials_per_pwm.items()):
+        row = i // ncols
+        col = i % ncols
+
+        ax = axes[i]
+        ax.axis("on")
+
+        # Shift axes in the last row
+        if row == nrows - 1 and last_row_pwms < ncols:
+            pos = ax.get_position()
+            new_x0 = pos.x0 + shift_frac
+            ax.set_position([new_x0, pos.y0, pos.width, pos.height])
+
+        for j, trial_data in enumerate(trials_data):
+            taus = trial_data["taus_sec_squared"]
+            msd = trial_data["msd"]
+            x_fit = trial_data["x_fit"]
+            reg = trial_data["reg"]
+
+            ax.plot(taus, msd, alpha=0.4, label=f"Trial {j}", color="skyblue")
+            ax.plot(x_fit, reg.predict(x_fit), alpha=0.6, color="steelblue")
+            ax.set_xticks([0,1,2])
+            ax.set_yticks([0,50,100])
+
+        ax.set_title(f"PWM = {pwm}")
+
+        if row == nrows - 1:
+            ax.set_xlabel(r"$\tau^2$ (s$^2$)")
+        if col == 0:
+            ax.set_ylabel(r"MSD (cm$^2$)")    
+
+    
+    if save_path:
+        plt.savefig(save_path + ".pdf", dpi=400, format="pdf")
+    plt.close(fig)
+
+
+
+
+def plot_circle_fit_grid(all_trials_per_pwm: dict,
+                         save_path: str = None):
+    """
+    Generate a grid figure showing trajectory + circle fit
+    for each PWM value of a given pogobot.
+
+    Each subplot corresponds to one PWM, and shows *all trials*
+    (trajectories + fitted circles).
+
+    Parameters
+    ----------
+    all_trials_per_pwm : dict
+        Dictionary mapping PWM values -> list of trial dicts.
+        Each trial dict should contain:
+            {
+              "trial": int,
+              "t_min": float,
+              "t_max": float,
+              "x_data": np.ndarray,
+              "y_data": np.ndarray,
+              "xc": float,
+              "yc": float,
+              "R": float
+            }
+    save_path : str or None
+        If provided, saves the combined figure to this path.
+    """
+    n_pwms = len(all_trials_per_pwm)
+    ncols = 5
+    nrows = int(np.ceil(n_pwms / ncols))
+
+    fig, axes = plt.subplots(nrows, ncols,
+                             figsize=(2 * ncols, 2 * nrows),
+                             sharex=False, sharey=True)
+    axes = axes.flatten()
+    plt.subplots_adjust(hspace=0.5, bottom=0.15)
+
+    # Start with all axes off
+    for ax in axes:
+        ax.axis("off")
+        ax.set_xlim(0, 200)
+        ax.set_ylim(-10, 200)
+
+    # Compute centering shift for last row
+    last_row_pwms = n_pwms % ncols if n_pwms % ncols != 0 else ncols
+    shift_frac = (ncols - last_row_pwms) / (2 * ncols) - 0.014
+
+    for i, (pwm, trials) in enumerate(all_trials_per_pwm.items()):
+        row = i // ncols
+        col = i % ncols
+
+        ax = axes[i]
+        ax.axis("on")
+
+        # Shift last row axes if not filled
+        if row == nrows - 1 and last_row_pwms < ncols:
+            pos = ax.get_position()
+            new_x0 = pos.x0 + shift_frac
+            ax.set_position([new_x0, pos.y0, pos.width, pos.height])
+
+        # Overlay trials for this PWM
+        for trial in trials:
+            x_data = trial["x_data"]
+            y_data = trial["y_data"]
+            xc, yc, R = trial["xc"], trial["yc"], trial["R"]
+
+            ax.plot(x_data, y_data, "steelblue", lw=0.8, alpha=0.8)
+            theta = np.linspace(0, 2 * np.pi, 200)
+            ax.plot(xc + R * np.cos(theta),
+                    yc + R * np.sin(theta),
+                    "r--", lw = 0.6, alpha = 0.6)
+            ax.set_xticks([0,100,200])
+            ax.set_yticks([0,100,200])
+            
+
+        ax.set_title(f"PWM = {pwm}")
+
+        # Selective labeling
+        if row == nrows - 1:
+            ax.set_xlabel(r"$x$ (cm)")
+        if col == 0:
+            ax.set_ylabel(r"$y$ (cm)")
+
+
+    fig.legend(
+        handles=[
+            plt.Line2D([0], [0], color="steelblue", lw = 0.8, alpha = 1, label="Trajectory"),
+            plt.Line2D([0], [0], color="red", lw=0.6, alpha = 0.6, ls="--", label="Fitted circle")
+        ],
+        loc="upper center", ncol=2, frameon=False
+    )
+
+    if save_path:
+        plt.savefig(save_path + ".pdf", dpi=400, format="pdf")
+    plt.close(fig)
+
+
+def plot_msd_all(all_trials_per_pwm: dict,
+                 save_path: str = None):
+    """
+    Generate a single figure overlaying MSD curves for all PWM values.
+
+    - Each PWM is assigned a distinct color (from inferno colormap).
+    - Multiple trials per PWM are shown as faint lines.
+    - The average MSD curve across trials (per PWM) is shown as a thicker line.
+
+    Parameters
+    ----------
+    all_trials_per_pwm : dict
+        Dictionary mapping PWM values to lists of trial_data dicts.
+        Each trial_data should come from `compute_v_msd` and contain
+        {"taus_sec_squared", "msd"}.
+
+    save_path : str or None
+        If provided, saves the figure to this path (PDF).
+        Otherwise, shows the figure interactively.
+    """
+    n_pwms = len(all_trials_per_pwm)
+    cmap = cm.get_cmap("Blues", n_pwms)  # distinct colors
+
+    fig, ax = plt.subplots(figsize=(4, 3))
+    ax.set_yticks([0, 50, 100])
+    ax.set_xticks([0, 1, 2])
+
+    for i, (pwm, trials_data) in enumerate(sorted(all_trials_per_pwm.items())):
+        color = cmap(i)
+
+        # collect all MSD arrays (interpolated to common taus grid)
+        taus_common = None
+        msd_list = []
+
+        for trial_data in trials_data:
+            taus = trial_data["taus_sec_squared"]
+            msd = trial_data["msd"]
+
+            if taus_common is None:
+                taus_common = taus  # assume all trials share same taus grid
+
+            # Plot raw MSD (faint lines)
+            ax.plot(taus, msd, color=color, alpha=0.5, lw=0.5)
+
+            msd_list.append(msd)
+
+        # compute mean MSD across trials
+        if len(msd_list) > 0:
+            msd_mean = np.mean(msd_list, axis=0)
+            ax.plot(taus_common, msd_mean,
+                    color=color, lw=1.7, alpha=1,
+                    label=pwm)
+
+    ax.set_xlabel(r"$\tau^2$ (s$^2$)")
+    ax.set_ylabel(r"MSD (cm$^2$)")
+    ax.legend(bbox_to_anchor=(1.05, 1))
+
+    fig.tight_layout()
+
+    if save_path:
+        plt.savefig(save_path + ".pdf", dpi=400, format="pdf")
+    else:
+        plt.show()
+
+    plt.close(fig)
