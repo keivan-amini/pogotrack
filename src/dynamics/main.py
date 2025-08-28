@@ -3,15 +3,31 @@ Main script controlling the execution of the dynamics
 characterization pipeline, through a CLI.
 """
 
-
 import argparse
 from .processor import DynamicsProcessor
 
 
 def main():
+
     """
     Description
     -----------
+
+    The execution of this function launches
+    the dynamics processing pipeline, i.e.,
+    the extraction of dynamical variables such
+    as the linear velocity, the angular velocity,
+    or the curvature radius given a .mp4 video
+    dynamical experiment in input.
+
+    A pogobot dynamical experiment in this context
+    is defined as a video where, given a selected list
+    of TESTED_PWM values, a pogobot runs for RUN_DURATION
+    seconds, then stops for PAUSE_DURATION seconds and repeat
+    the process for TRIALS_PER_PWM times. Then, it repeat the
+    process for the next value of TESTED_PWM list.
+
+    All the cited parameters are tunable in config/dynamics.yaml.
     
     Example:
 
@@ -22,9 +38,57 @@ def main():
         --processconfig config/default.yaml \
         --mode extract --plot \
         --pogobot pog_88
+    
+    This example command will automatically launch the
+    dynamics characterization in the data/tpu folder, where
+    it will be expected to have at least one 'pog_id.mp4' video
+    figuring one pogobot dynamical experiment. Video will be
+    processed using a background image data/tpu/bkg.bmp in this
+    case, using the config/dynamics.yaml dynamical parameters
+    and the config/default.yaml video processing parameters.
+    At the moment we can launch different steps of the dynamics
+    pipeline, which in order are:
 
+        1) --mode trim
+            this command cuts 'pog_id.mp4' in several different
+            .mp4 videos where pog is supposed to run, inside the
+            folder 'pog_id', using the video cutting dynamics
+            parameters. Videos are saved as: pog_id_pwm_trial.mp4.
 
-    TODO  
+        2) --mode process
+            this command processes the generated video and obtains
+            a pogobot .csv file with features 'time, x, y, theta, id'
+            in path pog_id/pog_id_pwm_trial.csv.
+
+        3) --mode check
+            this command just checks that all the videos have been
+            processed and it is possible to access all the generated
+            .csv file.
+
+        4) --mode clean
+            this command clean the generated .csv datasets, mainly
+            removing datasets with too many missing rows (problems during
+            video processing), trim leading and trailing skipped frames,
+            interpolating isolated skipped frames and filtering outer
+            trajectories (when pogobots hit walls).
+
+        5) --mode extract (optional) --plot
+            this command extract dynamical variables from the cleaned
+            generated .csv dataset, namely: angular velocity, linear
+            velocity, radius of curvature, and angular velocity
+            assuming uniform circular motion. 
+            Datasets are saved in results/dynamics/pog_id_physics.csv.
+            The --plot flag allows us to save grids per-pwm plots for
+            each pogobot, in results/dynamics/plot/pog_id folder.
+
+        6) --mode plot
+            save plots regarding the extracted dynamical variables
+            as a function of the pwm in results/dynamics/plot/pog_id 
+            folder.
+        
+        *7) --mode complete
+            launch each dynamical processing step sequentially
+            from 1 to 6 (not recommended)
     
     """
 
@@ -68,10 +132,10 @@ def main():
         processor.extract(pogobot = args.pogobot, plot = args.plot)
     
     if args.mode == "plot":
-        processor.plot(pogobot = args.pogobot) #TODO
+        processor.plot(pogobot = args.pogobot)
 
     if args.mode == "complete":
-        processor.run_all(pogobot = args.pogobot) #TODO
+        processor.run_all(pogobot = args.pogobot)
 
 
 if __name__ == "__main__":
