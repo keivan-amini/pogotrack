@@ -4,7 +4,7 @@ PLOT_TRAJECTORIES: false    #if True, plot_trajectories() will run after trackin
 
 # === VIDEO PROCESSING PARAMETERS ===
 N_POGO: 1              # Expected number of Pogobots in the arena.
-THRESHOLD: 10           # Binarization threshold for foreground segmentation.
+THRESHOLD: 7           # Binarization threshold for foreground segmentation.
 AREAS: [6000, 7500]    # [MIN, MAX] contour area in pixels^2 used to accept detected blobs.
 PERIMETERS: [300, 600] # [MIN, MAX] contour perimeter in pixels used to accept detected blobs.
 CENTER: [1512, 1531]   # Arena center in pixels (X, Y).
