@@ -139,7 +139,7 @@ def plot_quantity(df: pd.DataFrame, pog_name: str,
 
 
 def plot_msd_trials(trials_data, pwm, save_path=None):
-    
+
     """
     Plot overlay of MSD curves and linear fits for all trials
     of a given PWM.
@@ -246,9 +246,9 @@ def plot_msd_grid(all_trials_per_pwm: dict,
         if row == nrows - 1:
             ax.set_xlabel(r"$\tau^2$ (s$^2$)")
         if col == 0:
-            ax.set_ylabel(r"MSD (cm$^2$)")    
+            ax.set_ylabel(r"MSD (cm$^2$)")   
 
-    
+
     if save_path:
         plt.savefig(save_path + ".pdf", dpi=400, format="pdf")
     plt.close(fig)
@@ -329,9 +329,9 @@ def plot_circle_fit_grid(all_trials_per_pwm: dict,
                     "r--", lw = 0.6, alpha = 0.6)
             ax.set_xticks([0,100,200])
             ax.set_yticks([0,100,200])
-            
 
-        ax.set_title(f"PWM = {pwm}")
+
+        ax.set_title(rf"$\textbf{{{pwm}}}$")
 
         # Selective labeling
         if row == nrows - 1:
@@ -353,37 +353,43 @@ def plot_circle_fit_grid(all_trials_per_pwm: dict,
     plt.close(fig)
 
 
+
 def plot_msd_all(all_trials_per_pwm: dict,
                  save_path: str = None):
+    
     """
     Generate a single figure overlaying MSD curves for all PWM values.
 
-    - Each PWM is assigned a distinct color (from inferno colormap).
+    - Each PWM is assigned a distinct color (from colormap).
     - Multiple trials per PWM are shown as faint lines.
     - The average MSD curve across trials (per PWM) is shown as a thicker line.
+    - A colorbar indicates PWM values instead of a legend.
 
     Parameters
     ----------
-    all_trials_per_pwm : dict
-        Dictionary mapping PWM values to lists of trial_data dicts.
+    all_trials_per_pwm (dict):
+        dictionary mapping PWM values to lists of trial_data dicts.
         Each trial_data should come from `compute_v_msd` and contain
         {"taus_sec_squared", "msd"}.
 
-    save_path : str or None
-        If provided, saves the figure to this path (PDF).
+    save_path (str or None):
+        if provided, saves the figure to this path (PDF).
         Otherwise, shows the figure interactively.
     """
+
     n_pwms = len(all_trials_per_pwm)
-    cmap = cm.get_cmap("Blues", n_pwms)  # distinct colors
+    cmap = cm.get_cmap("Blues", n_pwms)
 
     fig, ax = plt.subplots(figsize=(4, 3))
-    ax.set_yticks([0, 50, 100])
     ax.set_xticks([0, 1, 2])
 
-    for i, (pwm, trials_data) in enumerate(sorted(all_trials_per_pwm.items())):
-        color = cmap(i)
+    # For colorbar
+    pwm_values = sorted(all_trials_per_pwm.keys())
+    norm = plt.Normalize(vmin=min(pwm_values), vmax=max(pwm_values))
 
-        # collect all MSD arrays (interpolated to common taus grid)
+    for _, (pwm, trials_data) in enumerate(sorted(all_trials_per_pwm.items())):
+        color = cmap(norm(pwm))  # map PWM to color
+
         taus_common = None
         msd_list = []
 
@@ -392,23 +398,24 @@ def plot_msd_all(all_trials_per_pwm: dict,
             msd = trial_data["msd"]
 
             if taus_common is None:
-                taus_common = taus  # assume all trials share same taus grid
+                taus_common = taus
 
             # Plot raw MSD (faint lines)
             ax.plot(taus, msd, color=color, alpha=0.5, lw=0.5)
 
             msd_list.append(msd)
 
-        # compute mean MSD across trials
         if len(msd_list) > 0:
             msd_mean = np.mean(msd_list, axis=0)
-            ax.plot(taus_common, msd_mean,
-                    color=color, lw=1.7, alpha=1,
-                    label=pwm)
+            ax.plot(taus_common, msd_mean, color=color, lw=1.7, alpha=1)
 
     ax.set_xlabel(r"$\tau^2$ (s$^2$)")
     ax.set_ylabel(r"MSD (cm$^2$)")
-    ax.legend(bbox_to_anchor=(1.05, 1))
+
+    sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
+    sm.set_array([])  # required for colorbar
+    cbar = fig.colorbar(sm, ax=ax, pad=0.02)
+    cbar.set_label("PWM")
 
     fig.tight_layout()
 
