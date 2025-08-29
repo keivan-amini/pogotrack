@@ -256,3 +256,32 @@ def debug_frame(frame_masked, diff, thresh, contours, title = None):
 
     plt.tight_layout(rect=(0, 0, 1, 0.97))
     plt.show()
+
+
+def save_image(img, save_path, cmap = None):
+
+    """
+    Save an image using matplotlib in a specified
+    save path.
+
+    Parameters
+    ----------
+        img (np.ndarray):
+            image to save.
+        save_path (str):
+            path in which the image will be saved.
+        cmap (str or Colormap):
+            colormap name used to map scalar data to
+            colors. Default is None.
+    
+    """
+
+    plt.figure(figsize=(8, 8))
+    if cmap:  # For grayscale images
+        plt.imshow(img, cmap = cmap)
+    else:  # For color images
+        plt.imshow(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
+    plt.axis("off")
+
+    plt.savefig(save_path, dpi = 400, bbox_inches="tight")
+    print(f"Image saved at: {save_path}")
