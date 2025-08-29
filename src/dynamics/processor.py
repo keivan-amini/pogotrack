@@ -91,7 +91,7 @@ class DynamicsProcessor:
 
         Parameters
         ----------
-            video_path (str):
+            folder_path (str):
                 path to the input dynamics experiment (.mp4).
             background_path (str):
                 path to the background image (.bmp).
@@ -211,7 +211,7 @@ class DynamicsProcessor:
                     print(f"✅ Created: {output_path}")
                 except ffmpeg.Error as e:
                     print(f"❌ Error trimming run {run_index} ({pwm}, trial {trial}): {e}")
-        
+
 
     def process_runs(self, pogobot: str):
 
@@ -240,7 +240,10 @@ class DynamicsProcessor:
 
                 output_csv = video_path.replace(".mp4", ".csv")
                 try:
-                    vp = VideoProcessor(video_path, self.background_path, output_csv, self.processing_config)
+                    vp = VideoProcessor(video_path,
+                                        self.background_path,
+                                        output_csv,
+                                        self.processing_config)
                     vp.process()
                     print(f"✅ CSV saved: {output_csv}")
                 except Exception as e:
@@ -356,7 +359,7 @@ class DynamicsProcessor:
 
     def extract_physics(self, pogobot: str = None,
                         plot: bool = False):
-            
+
         """
         Extract relevant physical variables for all trials of a given pogobot,
         and save them into a single .csv file.
@@ -387,7 +390,7 @@ class DynamicsProcessor:
         # --- Create results/plot/{pogobot} folder if plotting is enabled ---
         results_plot_dir = None
         base_dir = os.path.abspath(os.path.join(self.folder_path, "..", ".."))
-        results_dir = os.path.join(base_dir, "results", "dynamics")
+        results_dir = os.path.join(base_dir, "results", "dynamics", os.path.basename(self.folder_path))
         if plot:
             results_plot_dir = os.path.join(results_dir, "plot", pogobot)
             os.makedirs(results_plot_dir, exist_ok=True)
@@ -422,7 +425,7 @@ class DynamicsProcessor:
 
                     omega_fft = compute_omega_fft(df)
                     omega_noise = compute_omega_noise(df)
-                    
+
                     circle_trial_data =  compute_radius(df, self.t_subset,
                                                         results_r_path, pogobot,
                                                         pwm, trial)
@@ -447,7 +450,6 @@ class DynamicsProcessor:
 
                 except Exception as e:
                     print(f"⚠️ Skipping {pogobot} pwm={pwm} trial={trial} due to error: {e}")
-            
 
             all_trials_per_pwm[pwm] = trials_data
             all_circles_per_pwm[pwm] = circle_trials_data
@@ -514,8 +516,8 @@ class DynamicsProcessor:
         """
 
         base_dir = os.path.abspath(os.path.join(self.folder_path, "..", ".."))
-        csv_dir = os.path.join(base_dir, "results", "dynamics", pogobot + "_physics.csv")
-        plot_path = os.path.join(base_dir, "results", "dynamics", "plot", pogobot, pogobot)
+        csv_dir = os.path.join(base_dir, "results", "dynamics", os.path.basename(self.folder_path), pogobot + "_physics.csv")
+        plot_path = os.path.join(base_dir, "results", "dynamics", os.path.basename(self.folder_path), "plot", pogobot, pogobot)
         try:
             df = pd.read_csv(csv_dir)
             for quantity in self.plotting.keys():
@@ -528,7 +530,7 @@ class DynamicsProcessor:
 # --- Commands directly launched from CLI --- #
 
     def run_all(self, pogobot: str = None):
-        
+
         """
         Run full pipeline for all pogobots found.
         If pogobot is provided, only run the full pipeline for him.
@@ -540,7 +542,7 @@ class DynamicsProcessor:
                 example: 'pog_121'. Default is None (run full
                 pipeline for all the pogobots' videos)
         """
-        
+
         pogs_to_run = [pogobot] if pogobot else self.video_map.keys()
 
         for pog in pogs_to_run:
