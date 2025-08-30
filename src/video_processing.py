@@ -18,7 +18,6 @@ import pandas as pd
 import numpy as np
 from tqdm import tqdm
 
-from .plot_helpers import debug_frame, visualize_contours, plot_trajectories
 from .utils import (
     get_difference,
     binarize,
@@ -29,6 +28,13 @@ from .utils import (
     save_datas,
     convert_datas,
 )
+
+from .plot_helpers import (
+    debug_frame,
+    visualize_contours,
+    plot_trajectories,
+)
+
 
 
 class VideoProcessor:
@@ -228,43 +234,127 @@ class VideoProcessor:
         mask = np.zeros(self.background.shape[:2], dtype=np.uint8)
         cv2.circle(mask, self.CENTER, self.RADIUS, 255, -1)
         return mask
-    
+
     def skip_frame(self, n: int):
 
         """
-        Method function useful to skip the current frame
-        during the execution of the .process() method.
+        Skip a frame during processing and insert
+        placeholder data.
+
+        This method records zeros for positions and
+        orientations when detection fails, ensuring
+        that the output dataframe preserves frame continuity.
 
         Parameters
         ----------
             n (int):
-                number of the frame to skip
+                index of frame to skip
         
         Return
         ------
             n (int):
-                next frame to analyze
+                index of next frame to analyze
         """
 
         self.df = save_datas(self.df, n,[0],[0],[0])
         return n + 1
 
+    def _adjust_detection(self, diff):
+
+        """
+        Attempt to recover correct Pogobot detections by
+        tuning parameters.
+
+        Strategy
+        --------
+        1. Sweep threshold around `self.THRESHOLD` (± up to MAX_OFFSET).
+        2. If still unsuccessful, broaden area and perimeter ranges
+        using `self.FALLBACK_AREA` and `self.FALLBACK_PERIMETERS`.
+        3. Stop at the first successful configuration.
+
+        Parameters
+        ----------
+        diff (np.ndarray):
+            frame difference image after background
+            subtraction.
+
+        Returns
+        -------
+        contours (list):
+            list of detected contours.
+        x (list):
+            Pogobots x-coordinates.
+        y (list):
+            Pogobots y-coordinates.
+        thetas (list):
+            pogobot orientation angles.
+        success (bool):
+            whether detection matched expected number of Pogobots.
+        """
+
+        base_thresh = self.THRESHOLD
+        max_offset = self.MAX_OFFSET
+
+        # 1. Try thresholds in both directions
+        offsets = list(range(1, max_offset + 1))
+        candidates = [base_thresh + o for o in offsets] + [base_thresh - o for o in offsets]
+
+        for t in candidates:
+            if t <= 0:
+                continue
+            thresh = binarize(diff, threshold=t)
+            contours = find_contours(thresh, area_params=self.AREAS, peri_params=self.PERIMETERS)
+            x, y = get_position(contours)
+            thetas = get_all_angles(thresh, y, x)
+            if len(thetas) == self.N_POGO:
+                print("Success.")
+                return contours, x, y, thetas, True
+
+        # 2. Try wider area/perimeter ranges
+        thresh = binarize(diff, threshold=base_thresh)
+        contours = find_contours(thresh, area_params=self.FALLBACK_AREA, peri_params=self.FALLBACK_PERIMETERS)
+        x, y = get_position(contours)
+        thetas = get_all_angles(thresh, y, x)
+
+        if len(thetas) == self.N_POGO:
+            print("Success.")
+            return contours, x, y, thetas, True
+
+        # 3. If nothing worked, return last attempt
+        return contours, x, y, thetas, False
+
 
     def process(self):
 
         """
-        Run the video processing pipeline.
+        Run the full video processing pipeline.
 
-        Description
-        -----------
-        - Loads video and background.
-        - Applies arena mask.
-        - Computes background subtraction, binarization, and contour detection.
-        - Extracts Pogobot positions and orientations.
-        - Tracks Pogobots over frames and assigns IDs.
-        - Converts pixel data to centimeters and frames to time.
-        - Saves processed trajectories to .csv file.
-        - Optionally generates trajectory plots.        
+        Steps
+        -----
+        1. Load video and background.
+        2. Apply arena mask.
+        3. For each frame:
+        - Compute difference with background.
+        - Apply threshold and contour detection.
+        - Extract Pogobot positions and orientations.
+        - Apply fallback strategy if detections mismatch.
+        - Save detections to dataframe.
+        4. Track Pogobots across frames and assign IDs.
+        5. Convert pixels to centimeters and frames to seconds.
+        6. Save trajectories to CSV.
+        7. Optionally plot trajectories.
+
+        Notes
+        -----
+        - Frames where detection fails are skipped with placeholder data.
+        - Debug visualization is controlled by the `DEBUG_MODE` config flag.
+        - Fallback parameters are defined by `MAX_OFFSET`, `FALLBACK_AREA`,
+        and `FALLBACK_PERIMETERS`.
+
+        Output
+        ------
+        - CSV file containing tracked and transformed Pogobot trajectories.
+        - Optional trajectory plots if enabled in config.
         """
 
         start = time.time()
@@ -283,31 +373,26 @@ class VideoProcessor:
 
                 # Apply mask
                 frame_masked = cv2.bitwise_and(frame, frame, mask=mask)
-                background_masked = cv2.bitwise_and(self.background, self.background, mask=mask)
+                background_masked = cv2.bitwise_and(self.background, self.background, mask = mask)
 
                 # Processing pipeline
                 diff = get_difference(frame_masked, background_masked)
-                thresh = binarize(diff, threshold=self.THRESHOLD)
+                thresh = binarize(diff, threshold = self.THRESHOLD)
                 contours = find_contours(thresh, area_params=self.AREAS, peri_params=self.PERIMETERS)
                 x, y = get_position(contours)
                 thetas = get_all_angles(thresh, y, x)
 
-                # Fallback if detection count mismatch
                 if len(thetas) != self.N_POGO:
-                    print(f"Frame {n}: {len(thetas)} bots detected. Trying fallback parameters...")
+                    print(f"Frame {n}: {len(thetas)} bots detected. Attempting fallback...")
+                    contours, x, y, thetas, success = self._adjust_detection(diff)
 
-                    contours = find_contours(thresh, area_params=[1000, 10000], peri_params=[100, 900])
-                    x, y = get_position(contours)
-                    thetas = get_all_angles(thresh, y, x)
-
-                    if len(thetas) != self.N_POGO:
-                        print(f"Frame {n}: Still {len(thetas)} bots detected. Skipping frame!")
+                    if not success:
+                        print(f"Frame {n}: Still {len(thetas)} bots detected. Skipping frame.")
                         if bool(self.config.get("DEBUG_MODE", False)):
-                            print(self.config["DEBUG_MODE"])
                             debug_frame(frame_masked, diff, thresh, contours, title=f"Debug frame {n}")
-                    n = self.skip_frame(n)
-                    pbar.update(1)
-                    continue
+                        n = self.skip_frame(n)
+                        pbar.update(1)
+                        continue
 
                 # Visualize contours if requested for this frame index
                 if n in self.frames_to_visualize:
