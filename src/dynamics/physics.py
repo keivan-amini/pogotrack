@@ -18,7 +18,6 @@ from .plotting import (
 )
 
 
-### --- Signal Processing functions --- ###
 
 def butter_lowpass(cutoff: float, fs: float, order: int = 4):
 
@@ -72,8 +71,6 @@ def butter_lowpass_filter(data: np.ndarray, cutoff: float, fs: float, order: int
     y = filtfilt(b, a, data)
     return y
 
-
-### --- Physics observables functions --- ###
 
 def compute_omega_fft(df: pd.DataFrame,
                       cutoff: float = 1.0,
@@ -152,8 +149,8 @@ def compute_v_msd(df: pd.DataFrame,
     Estimate the linear velocity of a pogobot from its trajectory
     using the mean-squared displacement (MSD) method.
 
-    The MSD is computed for increasing lag times τ, and the early-time
-    regime is fitted as MSD ≈ v² τ². The slope of this fit gives an
+    The MSD is computed for increasing lag times $\tau$, and the early-time
+    regime is fitted as $MSD \simeq v^2 \tau^2$. The slope of this fit gives an
     estimate of the squared velocity.
 
     Parameters
@@ -162,7 +159,7 @@ def compute_v_msd(df: pd.DataFrame,
             Loaded .csv dataframe in pandas containing
             time, x, y, theta columns.
         max_tau_seconds (float):
-            Maximum lag time (in seconds) to consider for MSD
+            Maximum lag time (in seconds) to consider for $MSD$
             computation. Default is 2.0.
         taus_percentage (float):
             Fraction of the smallest lag times used for the 
@@ -173,9 +170,9 @@ def compute_v_msd(df: pd.DataFrame,
         dict:
             A dictionary containing:
             - v_msd (float): estimated pogobot linear velocity in cm/s.
-            - taus_sec_squared (np.ndarray): τ² values (s²).
-            - msd (np.ndarray): mean squared displacement (cm²).
-            - x_fit (np.ndarray): τ² values used for the regression fit.
+            - taus_sec_squared (np.ndarray): $\tau^2$ values $(s^2)$.
+            - msd (np.ndarray): mean squared displacement $(cm^2)$.
+            - x_fit (np.ndarray): $\tau^2$ values used for the regression fit.
             - reg (LinearRegression): fitted regression model.
     """
     x = df['x'].values
@@ -206,7 +203,7 @@ def compute_v_msd(df: pd.DataFrame,
     slope = reg.coef_[0]
 
     if slope < 0:
-        print(f"⚠️ Negative slope encountered (v_msd invalid), setting to 0")
+        print(f"Negative slope encountered (v_msd invalid), setting to 0")
         v_msd = 0
     else:
         v_msd = np.sqrt(slope)
@@ -218,6 +215,50 @@ def compute_v_msd(df: pd.DataFrame,
         "x_fit": x_fit,
         "reg": reg,
     }
+
+def compute_theta_msd(df: pd.DataFrame,
+                      max_tau_seconds: float = 2.0):
+    """
+    Compute mean squared displacement (MSD) of the theta angle,
+    properly unwrapping angular discontinuities.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Dataframe containing 'time' and 'theta' columns.
+        'theta' must be in degrees in [-180, 180].
+    max_tau_seconds : float, default=2.0
+        Maximum lag time (in seconds) to consider for MSD computation.
+
+    Returns
+    -------
+    dict
+        - "theta_msd": np.ndarray, MSD of theta angle (rad^2).
+        - "taus_sec_squared": np.ndarray, tau^2 values (s^2).
+    """
+    theta_rad = np.deg2rad(df['theta'].values)
+    time = df['time'].values
+    theta_unwrapped = np.unwrap(theta_rad)
+
+    dt = np.mean(np.diff(time))
+    T = len(theta_unwrapped)
+    max_tau = int(max_tau_seconds / dt)
+    taus = np.arange(1, min(max_tau, T))
+
+    theta_msd = []
+    for tau in taus:
+        dtheta = theta_unwrapped[tau:] - theta_unwrapped[:-tau]
+        theta_msd.append(np.mean(dtheta**2))
+
+    taus_sec = taus * dt
+    taus_sec_squared = taus_sec**2
+    theta_msd = np.array(theta_msd)
+
+    return {
+        "theta_msd": theta_msd,              # in rad^2
+        "taus_sec_squared": taus_sec_squared # in s^2
+    }
+
 
 def fit_circle(x, y):
 
@@ -348,7 +389,7 @@ def compute_omega_ucm(v_msd: float, R: float) -> float:
 
     """
     Compute the angular velocity associated with uniform
-    circular motion, assuming v = R * ω.
+    circular motion, assuming $v = R \omega$.
 
     Parameters
     ----------
