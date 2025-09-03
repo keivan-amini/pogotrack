@@ -11,6 +11,10 @@ CENTER: [1512, 1531]   # Arena center in pixels (X, Y).
 RADIUS: 1512           # Arena radius in pixels for the circular mask.
 SEARCH_RANGE: 200      # Trackpy search range (in pixels) to link detections across frames.
 
+RECT_MASK: false       # Change circular masking to rectangular masking
+WIDTH: 0               # Recutangular mask width (requires RECT_MASK)
+HEIGHT: 0              # Recutangular mask heigth (requires RECT_MASK)
+
 # === UNITS CONVERSION / TIMING ===
 FPS: 22.46             # Frames-per-second to convert frame index → time in seconds.
 POGOBOT_DIAMETER_CM: 4.975  # Pogobot physical diameter in centimeters.
