@@ -104,6 +104,9 @@ class VideoProcessor:
         "PERIMETERS": [300, 600],
         "CENTER": [1512, 1531],
         "RADIUS": 1512,
+        "RECT_MASK": False,
+        "WIDTH": 10,
+        "HEIGHT": 10,
         "SEARCH_RANGE": 200,
         "CENTROIDS_SIZE": 7,
         "ARROW_LENGTH_FRAME": 30,
@@ -219,10 +222,10 @@ class VideoProcessor:
         self.background = cv2.imread(self.background_path)
         self.background = cv2.flip(self.background, 0)
 
-    def _create_mask(self):
+    def _create_mask(self, rectangular=False):
 
         """
-        Create a circular binary mask for the arena.
+        Create a circular or rectangular binary mask for the arena.
 
         Return
         ------
@@ -232,7 +235,12 @@ class VideoProcessor:
         """
 
         mask = np.zeros(self.background.shape[:2], dtype=np.uint8)
-        cv2.circle(mask, self.CENTER, self.RADIUS, 255, -1)
+        if rectangular:
+            corner_topleft  = (self.CENTER-self.WIDTH/2, self.center-self.HEIGHT/2)
+            corner_botright = (self.CENTER+self.WIDTH/2, self.center+self.HEIGHT/2)
+            cv2.rectangle(mask, corner_topleft, corner_botright, (255,255,255),3)
+        else:
+            cv2.circle(mask, self.CENTER, self.RADIUS, 255, -1)
         return mask
 
     def skip_frame(self, n: int):
@@ -359,7 +367,7 @@ class VideoProcessor:
 
         start = time.time()
         self._load_video_and_background()
-        mask = self._create_mask()
+        mask = self._create_mask(rectangular=self.RECT_MASK)
 
         total_frames = int(self.video.get(cv2.CAP_PROP_FRAME_COUNT)) 
         n = 0
