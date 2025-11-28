@@ -212,6 +212,25 @@ class VideoProcessor:
         for key, value in merged.items():
             setattr(self, key, value)
 
+    @staticmethod
+    def _to_blue_channel(img: np.ndarray) -> np.ndarray:
+        """
+        Ensure single-channel processing:
+        - If `img` is already single-channel (H, W) or (H, W, 1), return it.
+        - If `img` is 3-channel BGR, return the blue channel (index 0).
+        - Otherwise, fall back to grayscale conversion.
+        """
+        if img is None:
+            return img
+        if img.ndim == 2:
+            return img
+        if img.ndim == 3:
+            if img.shape[2] == 1:
+                return img[..., 0]
+            if img.shape[2] >= 3:
+                return img[..., 0]  # OpenCV loads BGR → blue is channel 0
+        return cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+
     def _load_video_and_background(self):
 
         """
@@ -221,6 +240,7 @@ class VideoProcessor:
         self.video = cv2.VideoCapture(self.video_path)
         self.background = cv2.imread(self.background_path)
         self.background = cv2.flip(self.background, 0)
+        self.background = self._to_blue_channel(self.background)
 
     def _create_mask(self, rectangular=False):
 
@@ -315,7 +335,7 @@ class VideoProcessor:
             x, y = get_position(contours)
             thetas = get_all_angles(thresh, y, x)
             if len(thetas) == self.N_POGO:
-                print("Success.")
+                print("Success with threshold = " + str(t) + ".")
                 return contours, x, y, thetas, True
 
         # 2. Try wider area/perimeter ranges
@@ -325,7 +345,7 @@ class VideoProcessor:
         thetas = get_all_angles(thresh, y, x)
 
         if len(thetas) == self.N_POGO:
-            print("Success.")
+            print("Success with wider area/perimeter ranges.")
             return contours, x, y, thetas, True
 
         # 3. If nothing worked, return last attempt
@@ -379,6 +399,9 @@ class VideoProcessor:
                     break
                 frame = cv2.flip(frame, 0)
 
+                # Convert to single-channel blue if needed
+                frame = self._to_blue_channel(frame)
+
                 # Apply mask
                 frame_masked = cv2.bitwise_and(frame, frame, mask=mask)
                 background_masked = cv2.bitwise_and(self.background, self.background, mask = mask)
@@ -389,7 +412,7 @@ class VideoProcessor:
                 contours = find_contours(thresh, area_params=self.AREAS, peri_params=self.PERIMETERS)
                 x, y = get_position(contours)
                 thetas = get_all_angles(thresh, y, x)
-
+                
                 if len(thetas) != self.N_POGO:
                     print(f"Frame {n}: {len(thetas)} bots detected. Attempting fallback...")
                     contours, x, y, thetas, success = self._adjust_detection(diff)
@@ -409,6 +432,10 @@ class VideoProcessor:
                 self.df = save_datas(self.df, n, x, y, thetas)
                 n += 1
                 pbar.update(1)
+
+                #if n == 30000: # stops at 25 mins #bug here: this does not work if the frame is skipped or something bug advancing line fallback
+                #if n == 2400:
+                    #break
 
         self.video.release()
 

@@ -39,7 +39,7 @@ def visualize_contours(frame, contours, x, y, thetas, cfg):
             pogobot in the video, measured in pixel [px].
         thetas (list):
             list containing the theta angle of each pogobot, 
-            measured in degrees [°]. Here, θ ∈ [-180, 180].
+            measured in degrees [°]. Here, $\theta \in$ [-180, 180].
         cfg (dict):
             dictionary containing all the processing parameters,
             contained in config/default.yaml
@@ -73,7 +73,7 @@ def visualize_contours(frame, contours, x, y, thetas, cfg):
         cols, rows = 1, 1
     else:
         cols = min(3, n)
-        rows = np.ceil(n / cols)
+        rows = int(np.ceil(n / cols))
 
     plt.figure(figsize=(15, 5 * rows))
 
@@ -119,7 +119,7 @@ def visualize_arena(x, y, thetas, cfg):
             pogobot in the video, measured in pixel [px].
         thetas (list):
             list containing the theta angle of each pogobot, 
-            measured in degrees [°]. Here, θ ∈ [-180, 180].
+            measured in degrees [°]. Here, $\theta \in$ [-180, 180].
         cfg (dict):
             dictionary containing all the processing parameters,
             contained in config/default.yaml
@@ -192,7 +192,7 @@ def plot_trajectories(csv_path, title, cfg, bg_path = None):
     plt.title(title)
     ax.set_xlabel("x [px]")
     ax.set_ylabel("y [px]")
-    plt.grid(True)
+    #plt.grid(True)
 
     ax.set_xlim([0, cfg["ARENA_XLIM"][-1] * (cfg["POGOBOT_DIAMETER_CM"] / cfg["PIXEL_DIAMETER"])])
     ax.set_ylim([0, cfg["ARENA_YLIM"][-1] * (cfg["POGOBOT_DIAMETER_CM"] / cfg["PIXEL_DIAMETER"])])

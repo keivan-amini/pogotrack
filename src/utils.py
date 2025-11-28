@@ -34,29 +34,30 @@ def get_difference(frame, background):
     diff = cv2.subtract(temp, background)
     return diff
 
-def binarize(frame, threshold = 2):
-
+def binarize(frame: np.ndarray, threshold: int = 2) -> np.ndarray:
     """
-    Function that converts the input frame into
-    grayscale, and then applies a thresholding
-    operation to return a binary black-and-white mask.
+    Convert an image to grayscale if needed and apply a binary threshold.
 
     Parameters
     ----------
         frame (np.ndarray):
-            input image in BGR format.
+            Input image; accepts single-channel or BGR/BGRA arrays. 
         threshold (int), optional:
-            threshold value used for binarization (default = 2).
-    
-    Return
-    ------
-        thresh (np.ndarray):
-            binary black-and-white mask of the input image.
-    """
+            Threshold value used for binarization (default = 2). 
 
-    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+    Returns
+    -------
+        thresh (np.ndarray):
+            Binary black-and-white mask with values in {0, 255}. 
+    """
+    if frame.ndim == 3 and frame.shape[2] >= 3:
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+    else:
+        gray = frame
+
     _, thresh = cv2.threshold(gray, threshold, 255, cv2.THRESH_BINARY)
     return thresh
+
 
 def find_contours(thresh, area_params, peri_params):
 
@@ -119,7 +120,7 @@ def get_position(contours):
             y_coords.append(y)
     return x_coords, y_coords
 
-def get_angle(frame, i0, j0, R = 30):
+def get_angle(frame, i0, j0, R = 30): # this parameter R MUST BE in default.yaml ! Resolve bug: theta is not precise when LED are present
 
     """
     Function that estimates the direction angle theta
@@ -152,7 +153,7 @@ def get_angle(frame, i0, j0, R = 30):
                 yi += frame[i, j] * i
                 xi += frame[i, j] * j
                 s += frame[i, j]
-                
+
     theta = np.arctan2(yi/s - i0, xi/s - j0) * 180 / np.pi
     return theta
 
