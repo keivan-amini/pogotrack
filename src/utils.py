@@ -9,7 +9,7 @@ import pandas as pd
 from trackpy import link_df
 
 
-def get_difference(frame, background):
+def get_difference(frame, background, debug=False):
 
     """
     Function that creates a copy of the first
@@ -29,8 +29,9 @@ def get_difference(frame, background):
         diff (np.ndarray):
             result of the subtraction.
     """
-
-    temp = frame.copy()
+    temp = frame
+    if debug:
+        temp = frame.copy() # takes time
     diff = cv2.subtract(temp, background)
     return diff
 

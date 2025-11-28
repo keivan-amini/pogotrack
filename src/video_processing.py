@@ -125,6 +125,9 @@ class VideoProcessor:
         "HEAD_LENGTH": 30,
         "TRAJECTORY_DPI": 300,
     }
+    
+    _background_cache = {}  # Cache backgrounds by path
+    _config_cache = {}      # Cache configs by path
 
     def __init__(self, video_path, background_path, save_path, config_path, frame_visualize = None):
 
@@ -153,7 +156,10 @@ class VideoProcessor:
         with open(config_path, "r") as f:
             yaml_config = yaml.safe_load(f) or {}
 
-        self._load_config(yaml_config)
+        # Load or retrieve cached config
+        if config_path not in self._config_cache:
+            self._config_cache[config_path] = self._load_config(yaml_config)
+        self.config = self._config_cache[config_path]
 
         # Normalize frames-to-visualize: merge CLI (if any) with .yaml list
         cli_frames = frame_visualize
@@ -208,9 +214,9 @@ class VideoProcessor:
                 normalized_yaml[key_up] = coerce_bool(v)
 
         merged = {**self.DEFAULTS, **normalized_yaml}
-        self.config = merged
         for key, value in merged.items():
             setattr(self, key, value)
+        return merged
 
     @staticmethod
     def _to_blue_channel(img: np.ndarray) -> np.ndarray:
@@ -238,9 +244,13 @@ class VideoProcessor:
         """
 
         self.video = cv2.VideoCapture(self.video_path)
-        self.background = cv2.imread(self.background_path)
-        self.background = cv2.flip(self.background, 0)
-        self.background = self._to_blue_channel(self.background)
+        
+        # use cache
+        if self.background_path not in self._background_cache:
+            self._background_cache[self.background_path] = cv2.imread(self.background_path)
+            self._background_cache[self.background_path] = cv2.flip(self._background_cache[self.background_path], 0)
+            self._background_cache[self.background_path] = self._to_blue_channel(self._background_cache[self.background_path])
+        self.background = self._background_cache[self.background_path]
 
     def _create_mask(self, rectangular=False):
 
@@ -392,6 +402,8 @@ class VideoProcessor:
         total_frames = int(self.video.get(cv2.CAP_PROP_FRAME_COUNT)) 
         n = 0
 
+        background_masked = cv2.bitwise_and(self.background, self.background, mask = mask)
+
         with tqdm(total = total_frames, desc= "Processing video", unit= "frame") as pbar:
             while self.video.isOpened():
                 ret, frame = self.video.read()
@@ -404,10 +416,9 @@ class VideoProcessor:
 
                 # Apply mask
                 frame_masked = cv2.bitwise_and(frame, frame, mask=mask)
-                background_masked = cv2.bitwise_and(self.background, self.background, mask = mask)
 
                 # Processing pipeline
-                diff = get_difference(frame_masked, background_masked)
+                diff = get_difference(frame_masked, background_masked, bool(self.config.get("DEBUG_MODE", False)))
                 thresh = binarize(diff, threshold = self.THRESHOLD)
                 contours = find_contours(thresh, area_params=self.AREAS, peri_params=self.PERIMETERS)
                 x, y = get_position(contours)
