@@ -1,22 +1,25 @@
 # === GLOBAL DEBUGGING ===
-DEBUG_MODE: false     # If true, debug plotting helpers (e.g., frame visualizations) will run. If false, they no-op.
-PLOT_TRAJECTORIES: false    #if True, plot_trajectories() will run after tracking
+DEBUG_MODE: true     # If true, debug plotting helpers (e.g., frame visualizations) will run. If false, they no-op.
+PLOT_TRAJECTORIES: true    # If True, plot_trajectories() will run after tracking
 
 # === VIDEO PROCESSING PARAMETERS ===
-N_POGO: 1              # Expected number of Pogobots in the arena.
-THRESHOLD: 7           # Binarization threshold for foreground segmentation.
-AREAS: [6000, 7500]    # [MIN, MAX] contour area in pixels^2 used to accept detected blobs.
-PERIMETERS: [300, 600] # [MIN, MAX] contour perimeter in pixels used to accept detected blobs.
-CENTER: [1512, 1531]   # Arena center in pixels (X, Y).
-RADIUS: 1512           # Arena radius in pixels for the circular mask.
+N_POGO: 24              # Expected number of Pogobots in the arena.
+THRESHOLD: 50          # Binarization threshold for foreground segmentation.
+AREAS: [1000, 10000]    # [MIN, MAX] contour area in pixels^2 used to accept detected blobs.
+PERIMETERS: [100, 900] # [MIN, MAX] contour perimeter in pixels used to accept detected blobs.
+CENTER: [1512, 1450]   # Arena center in pixels (X, Y).
+RADIUS: 1380           # Arena radius in pixels for the circular mask.
 SEARCH_RANGE: 200      # Trackpy search range (in pixels) to link detections across frames.
 
 RECT_MASK: false       # Change circular masking to rectangular masking
 WIDTH: 0               # Recutangular mask width (requires RECT_MASK)
 HEIGHT: 0              # Recutangular mask heigth (requires RECT_MASK)
+MAX_OFFSET: 50          # Maximum threshold offset applied to frame.
+FALLBACK_AREA: [1000, 10000] # Fallback area params
+FALLBACK_PERIMETERS: [100, 900] # Fallback perimeters params
 
 # === UNITS CONVERSION / TIMING ===
-FPS: 22.46             # Frames-per-second to convert frame index → time in seconds.
+FPS: 20             # Frames-per-second to convert frame index → time in seconds.
 POGOBOT_DIAMETER_CM: 4.975  # Pogobot physical diameter in centimeters.
 PIXEL_DIAMETER: 97.01       # Pogobot apparent diameter in pixels (calibration).
 
