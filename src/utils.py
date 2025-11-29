@@ -120,9 +120,13 @@ def get_position(contours):
             y_coords.append(y)
     return x_coords, y_coords
 
-def get_angle(frame, i0, j0, R = 30): # this parameter R MUST BE in default.yaml ! Resolve bug: theta is not precise when LED are present
+def get_angle(frame, i0, j0, R = 30):
 
     """
+    Two bugs to solve at the moment:
+    1) Parameter R must be in default.yaml
+    2) Function does not work properly when Pogobots are emitting with the LED
+
     Function that estimates the direction angle theta
     (in degrees) of a pogobot from its light intensity
     distribution within a circular region of radius R
@@ -131,30 +135,37 @@ def get_angle(frame, i0, j0, R = 30): # this parameter R MUST BE in default.yaml
     Parameters
     ----------
         frame (np.ndarray):
-            binary image (thresh) containing light pixels.
+            Binary image (thresh) containing light pixels.
         i0 (int):
-            centroid row index (y-coordinate).
+            Centroid row index (y-coordinate).
         j0 (int):
-            centroid column index (x-coordinate).
+            Centroid column index (x-coordinate).
         R (int), optional:
-            radius of the circular region considered (default = 30).
-    
-    Return
-    ------
+            Radius of the circular region considered (default = 30).
+
+    Returns
+    -------
         theta (float):
-            estimated orientation angle in degrees.
+            Estimated orientation angle in degrees.
     """
+    h, w = frame.shape
+    i_min, i_max = max(0, i0 - R), min(h, i0 + R + 1)
+    j_min, j_max = max(0, j0 - R), min(w, j0 + R + 1)
 
-    xi, yi, s = 0, 0, 0
+    patch = frame[i_min:i_max, j_min:j_max]
+    ys = np.arange(i_min, i_max)[:, None]
+    xs = np.arange(j_min, j_max)[None, :]
+    mask = (ys - i0) ** 2 + (xs - j0) ** 2 <= R ** 2
+    patch_masked = patch * mask
 
-    for i in range(i0 - R, i0 + R + 1):
-        for j in range(j0 - R, j0 + R + 1):
-            if (i - i0)**2 + (j - j0)**2 <= R**2:  # Only consider points within the circle
-                yi += frame[i, j] * i
-                xi += frame[i, j] * j
-                s += frame[i, j]
+    s = patch_masked.sum()
+    if s == 0:
+        return np.nan
 
-    theta = np.arctan2(yi/s - i0, xi/s - j0) * 180 / np.pi
+    yi = (patch_masked * ys).sum()
+    xi = (patch_masked * xs).sum()
+
+    theta = np.arctan2(yi / s - i0, xi / s - j0) * 180 / np.pi
     return theta
 
 def get_all_angles(thresh, x, y):
