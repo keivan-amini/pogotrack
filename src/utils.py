@@ -222,7 +222,7 @@ def save_datas(df, frame, x, y, thetas):
     """
 
     if len(x) == 0 or len(y) == 0 or len(thetas) == 0:
-        return df  # Nothing to add
+        return df
 
     temp_df = pd.DataFrame({
         "frame": [frame] * len(x),
@@ -239,7 +239,7 @@ def save_datas(df, frame, x, y, thetas):
     return df
 
 
-def track_objects(df, search_range = 50):
+def track_objects(df, search_range = 50, memory = 3):
 
     """
     Function that uses Trackpy to assign a
@@ -261,7 +261,14 @@ def track_objects(df, search_range = 50):
             dataframe with an additional 'particle' column.
     """
 
-    df = link_df(df, search_range = search_range)
+    df_link = df.dropna(subset=["x", "y"]).copy()
+    df_link = link_df(df_link, search_range=search_range, memory=memory)
+    df = df.merge(
+        df_link[["frame", "x", "y", "particle"]],
+        on=["frame", "x", "y"],
+        how="left"
+    )
+
     return df
 
 def pixel_to_cm(pixels, pogobot_diameter_cm, pixel_diameter):
