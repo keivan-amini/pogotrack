@@ -1,0 +1,4 @@
+[submodule "pogotrack_gui"]
+	path = pogotrack_gui
+	url = https://github.com/jeremyaqp/pogotrack_gui.git
+	branch = main

@@ -28,10 +28,18 @@ python3 scripts/main.py --video data/example.mp4 --background data/bkg.bmp --out
 
 ## Requirements
 
-TODO
+Python3.10+
+
+For python packages, see _requirements.txt_
 
 ---
 
 ## License
 
 TODO
+
+# Submodules
+
+## Pogotrack_gui
+
+A minimalistic tool available with a GUI to help write the configuration file.  
