@@ -1,11 +1,14 @@
 # Pogotrack
 
-![Pogotrack Logo](img/logo.png)
+<p align="center">
+  <img src="img/logo.png" alt="Pogotrack logo" width="600">
+</p>
 
-Pogotrack is a lightweight video-processing and analysis toolkit for reproducible tracking of Pogobot swarm experiments, estimating per-robot pose \((x, y, \theta)\) and persistent IDs from video.  
+
+Pogotrack is a lightweight video-processing and analysis toolkit for reproducible tracking of Pogobot swarm experiments, estimating per-robot pose $(x, y, \theta)$ and persistent IDs from video.  
 It is designed to remain robust across lighting conditions and lenses by relying on simple fiducials and standard computer-vision primitives.
 
-Pogotrack is primarily intended for experiments with **Pogobots**, an open-source, open-hardware low-cost robot platform for swarm robotics research and programmable active matter. See the Pogobot [paper]( https://arxiv.org/abs/2504.08686) (DOI: 10.48550/arXiv.2504.08686).
+Pogotrack is primarily intended for experiments with **[Pogobots]**(https://pogobot.github.io/), an open-source, open-hardware low-cost robot platform for swarm robotics research and programmable active matter. See the Pogobot [paper]( https://arxiv.org/abs/2504.08686) (DOI: 10.48550/arXiv.2504.08686).
 
 ---
 
@@ -19,24 +22,23 @@ Given a video experiment and a background image, the pipeline:
 - Detects contours for each Pogobot.
 - Estimates orientation using a center-of-luminance heuristic.
 - Assigns persistent IDs using tracking utilities [TrackPy](https://soft-matter.github.io/trackpy/v0.7/).
-- Exports a time series of \((x, y, \theta, \mathrm{ID})\) for each agent.
+- Exports a time series of $(x, y, \theta, \mathrm{ID})$ for each agent.
 
 ### Dynamics workflow (motion characterization)
 For videos containing systematic PWM sweeps / repeated runs, the dynamics workflow:
 - Trims recordings into run segments.
 - Filters trajectories (e.g., wall interactions, invalid data).
-- Computes observables such as linear speed \(v\), angular speed \(\omega\), curvature radius \(R\) (with MSD-based estimators when applicable).
+- Computes observables such as linear speed $v$, angular speed $\omega\$, curvature radius $R$ (with MSD-based estimators when applicable).
 - Produces diagnostic plots vs PWM.
 
 > Pogotrack is under active development; the current release focuses on:
 > (i) `src/video_processing.py` and (ii) the `src/dynamics/` workflow.
 
-
-![Main pogotrack modules and dataflow Logo](img/pipeline.png)
-
+<p align="center">
+  <img src="img/pipeline.png" alt="Main pogotrack modules and dataflow" width="300">
+</p>
 ---
 ## Repository layout
-
 ```text
 pogotrack/
 ├── main.py                      # CLI entry point for the full tracking pipeline
@@ -58,9 +60,7 @@ pogotrack/
 ```
 
 ---
-
 ## Installation
-
 ```bash
 # From the repo root
 python -m venv .venv
@@ -69,7 +69,6 @@ source .venv/bin/activate
 python -m pip install -U pip
 pip install -r requirements.txt
 ```
-
 ---
 
 ## Usage
@@ -83,7 +82,6 @@ python3 -m main \
   --output results/tracking.csv \
   --config config/default.yaml \
 ```
-
 ---
 
 ## Configuration
@@ -121,8 +119,6 @@ Pogotrack is configured via YAML files in `config/` (e.g. `config/default.yaml`)
 
 ## Debugging tools
 
-## Debugging tools
-
 ### Per-frame debug visualization
 Use frame-level visualizations to validate each processing step:
 - Background subtraction
@@ -138,7 +134,6 @@ Plot `(x, y)` trajectories per `particle`, optionally on the arena background, t
 
 ### GIF reconstruction
 Create a GIF overlay using inferred `(x, y, theta)` on top of a background image.  
-This is the fastest way to confirm your inferred pose matches the original video.
 
 ---
 
