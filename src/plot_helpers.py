@@ -1,15 +1,17 @@
 """
 This module aims at implementing plot functions
 useful to understand, debug and fine-tune pogotrack
-processing parameters contained in config/default.yaml.
+processing parameters contained in config directory.
 """
 
 import cv2
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
 import trackpy as tp
 
+import matplotlib.pyplot as plt
+from matplotlib.animation import FuncAnimation, PillowWriter
+from matplotlib.patches import FancyArrowPatch
 
 def visualize_contours(frame, contours, x, y, thetas, cfg):
 
@@ -285,3 +287,151 @@ def save_image(img, save_path, cmap = None):
 
     plt.savefig(save_path, dpi = 400, bbox_inches="tight")
     print(f"Image saved at: {save_path}")
+
+
+def visualize_gif(csv_path, cfg, bg_path=None, show=True):
+
+    """
+    Save (and optionally display) a GIF overlay for debugging tracking output,
+    with axes expressed in centimeters.
+
+    Expected keys in cfg:
+    --------------------
+    From cfg (top-level):
+      - FPS
+      - POGOBOT_DIAMETER_CM
+      - PIXEL_DIAMETER
+
+    From plotting section (cfg['PLOTTING'] or cfg directly):
+      - ARENA_XLIM (used only if bg is None; otherwise derived from arena size)
+      - ARENA_YLIM (used only if bg is None; otherwise derived from arena size)
+      - ARROW_LENGTH_VIS (interpreted as a length in **cm** for this function)
+      - CENTROIDS_SIZE
+      - TRAJECTORY_DPI
+
+    Parameters
+    ----------
+    csv_path (str):
+        Path to the CSV.
+    cfg (dict):
+        Full config dict or plotting dict; if full, 'PLOTTING' is used.
+    bg_path (str), default = None
+        Path to background image (video background).
+    show (bool), default = None
+        If True, display the resulting GIF in IPython when possible.
+
+    """
+    fps = cfg.get("FPS", None)
+    pcfg = cfg.get("PLOTTING", cfg)
+
+    df = pd.read_csv(csv_path)[["time", "x", "y", "theta", "particle"]].copy()
+    df["particle"] = df["particle"].astype(int)
+
+    gif_path = csv_path[:-4] + ".gif" if csv_path.lower().endswith(".csv") else (csv_path + ".gif")
+
+    times = np.sort(df["time"].unique())
+    particles = np.sort(df["particle"].unique())
+    n = len(particles)
+    pid_to_i = {pid: i for i, pid in enumerate(particles)}
+    df["pi"] = df["particle"].map(pid_to_i).astype(int)
+
+    T = len(times)
+    xF = np.full((T, n), np.nan, float)
+    yF = np.full((T, n), np.nan, float)
+    thF_deg = np.full((T, n), np.nan, float)
+
+    t_to_f = {t: k for k, t in enumerate(times)}
+    f = df["time"].map(t_to_f).to_numpy()
+    i = df["pi"].to_numpy()
+    xF[f, i] = df["x"].to_numpy(float)    
+    yF[f, i] = df["y"].to_numpy(float)    
+    thF_deg[f, i] = df["theta"].to_numpy(float)
+
+    arena_xlim = pcfg.get("ARENA_XLIM", [0, 1])
+    arena_ylim = pcfg.get("ARENA_YLIM", [0, 1])
+
+    bg = None
+    extent = None
+    if bg_path is not None:
+        bg = plt.imread(bg_path)
+        h_px, w_px = bg.shape[:2]
+
+        cm_per_px = float(cfg["POGOBOT_DIAMETER_CM"]) / float(cfg["PIXEL_DIAMETER"])
+        w_cm = w_px * cm_per_px
+        h_cm = h_px * cm_per_px
+
+        # top-left origin mapping for images:
+        extent = [0.0, w_cm, h_cm, 0.0]
+        arena_xlim = [0.0, w_cm]
+        arena_ylim = [0.0, h_cm]
+
+    save_dpi = int(pcfg["TRAJECTORY_DPI"])
+    fig, ax = plt.subplots(figsize=(6, 6), dpi=100)
+    ax.set_aspect("equal", adjustable="box")
+    ax.set_xlim(arena_xlim)
+    ax.set_ylim(arena_ylim)
+    ax.set_xlabel("x [cm]")
+    ax.set_ylabel("y [cm]")
+
+    if bg is not None:
+        bg = np.flipud(bg)  # vertical flip (along y-axis)
+        ax.imshow(bg, origin="upper", extent=extent, zorder=0)  # pixel->cm mappin
+
+    body_size = float(pcfg["CENTROIDS_SIZE"])
+    scat = ax.scatter([], [], s=body_size, c="tab:blue", linewidths=0, zorder=3)
+
+    # arrows
+    base_arrow_len = float(pcfg["ARROW_LENGTH_VIS"])
+    arrows = []
+    for _ in range(n):
+        a = FancyArrowPatch(
+            (0, 0), (0, 0),
+            arrowstyle="-|>",
+            mutation_scale=6,
+            color="red",
+            linewidth=1.5,
+            zorder=0,
+        )
+        a.set_visible(False)
+        ax.add_patch(a)
+        arrows.append(a)
+
+    title = ax.set_title("")
+
+    def update(k):
+        x = xF[k]
+        y = yF[k]
+        th_deg = thF_deg[k]
+        valid = np.isfinite(x) & np.isfinite(y) & np.isfinite(th_deg)
+
+        # points
+        x_plot = np.where(valid, x, np.nan)
+        y_plot = np.where(valid, y, np.nan)
+        scat.set_offsets(np.column_stack([x_plot, y_plot]))
+
+        # arrows
+        th = np.deg2rad(th_deg)
+        dx = base_arrow_len * np.cos(th)
+        dy = base_arrow_len * np.sin(th)
+
+        for j in range(n):
+            if not valid[j]:
+                arrows[j].set_visible(False)
+                continue
+            arrows[j].set_visible(True)
+            arrows[j].set_positions((x[j], y[j]), (x[j] + dx[j], y[j] + dy[j]))
+
+        title.set_text(f"Inferred dynamics \n t = {times[k]:.3f} s")
+
+        return (scat, title, *arrows)
+
+    ani = FuncAnimation(fig, update, frames=T, interval=1000 / fps, blit=False)
+    ani.save(gif_path, writer=PillowWriter(fps=fps), dpi=save_dpi)
+    plt.close(fig)
+
+    if show:
+        try:
+            from IPython.display import Image, display
+            display(Image(filename=gif_path))
+        except Exception:
+            pass
