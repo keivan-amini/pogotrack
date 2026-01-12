@@ -8,7 +8,7 @@
 Pogotrack is a lightweight video-processing and analysis toolkit for reproducible tracking of Pogobot swarm experiments, estimating per-robot pose $(x, y, \theta)$ and persistent IDs from video.  
 It is designed to remain robust across lighting conditions and lenses by relying on simple fiducials and standard computer-vision primitives.
 
-Pogotrack is primarily intended for experiments with **[Pogobots]**(https://pogobot.github.io/), an open-source, open-hardware low-cost robot platform for swarm robotics research and programmable active matter. See the Pogobot [paper]( https://arxiv.org/abs/2504.08686) (DOI: 10.48550/arXiv.2504.08686).
+Pogotrack is primarily intended for experiments with **[Pogobots](https://pogobot.github.io/)**, an open-source, open-hardware low-cost robot platform for swarm robotics research and programmable active matter. See the Pogobot [paper]( https://arxiv.org/abs/2504.08686) (DOI: 10.48550/arXiv.2504.08686).
 
 ---
 
@@ -35,8 +35,9 @@ For videos containing systematic PWM sweeps / repeated runs, the dynamics workfl
 > (i) `src/video_processing.py` and (ii) the `src/dynamics/` workflow.
 
 <p align="center">
-  <img src="img/pipeline.png" alt="Main pogotrack modules and dataflow" width="300">
+  <img src="img/pipeline.png" alt="Main pogotrack modules and dataflow" width="450">
 </p>
+
 ---
 ## Repository layout
 ```text
