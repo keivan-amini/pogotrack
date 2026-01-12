@@ -35,7 +35,7 @@ For videos containing systematic PWM sweeps / repeated runs, the dynamics workfl
 > (i) `src/video_processing.py` and (ii) the `src/dynamics/` workflow.
 
 <p align="center">
-  <img src="img/pipeline.png" alt="Main pogotrack modules and dataflow" width="450">
+  <img src="img/pipeline.png" alt="Main pogotrack modules and dataflow" width="530">
 </p>
 
 ---
