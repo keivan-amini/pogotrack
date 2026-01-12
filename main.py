@@ -24,11 +24,11 @@ def main():
 
     Example:
 
-    /usr/bin/python3 -m scripts.main \                
-        --video data/example.mp4 \
-        --background data/bkg.bmp \
-        --output results/tracking.csv \
-        --config config/default.yaml \
+    /usr/bin/python3 -m main                 
+        --video data/example.mp4 
+        --background data/bkg.bmp 
+        --output results/tracking.csv 
+        --config config/default.yaml 
         --visualize 1 10 200
 
     will automatically launch the video analysis pipeline on
@@ -62,7 +62,7 @@ def main():
         background_path = args.background,
         save_path = args.output,
         config_path = args.config,
-        frame_visualize = args.visualize 
+        frame_visualize = args.visualize
     )
     vp.process()
 

@@ -18,7 +18,7 @@ import pandas as pd
 import numpy as np
 from tqdm import tqdm
 
-from .utils import (
+from src.utils import (
     get_difference,
     binarize,
     find_contours,
@@ -29,10 +29,11 @@ from .utils import (
     convert_datas,
 )
 
-from .plot_helpers import (
+from src.plot_helpers import (
     debug_frame,
     visualize_contours,
     plot_trajectories,
+    visualize_gif
 )
 
 
@@ -108,6 +109,7 @@ class VideoProcessor:
         "WIDTH": 10,
         "HEIGHT": 10,
         "SEARCH_RANGE": 200,
+        "MEMORY": 5,
         "CENTROIDS_SIZE": 7,
         "ARROW_LENGTH_FRAME": 30,
         "TIP_LENGTH": 0.2,
@@ -266,11 +268,12 @@ class VideoProcessor:
 
         mask = np.zeros(self.background.shape[:2], dtype=np.uint8)
         if rectangular:
-            corner_topleft  = (self.CENTER-self.WIDTH/2, self.center-self.HEIGHT/2)
-            corner_botright = (self.CENTER+self.WIDTH/2, self.center+self.HEIGHT/2)
-            cv2.rectangle(mask, corner_topleft, corner_botright, (255,255,255),3)
+            cx, cy = self.CENTER 
+            corner_topleft  = (int(cx - self.WIDTH  / 2), int(cy - self.HEIGHT / 2))
+            corner_botright = (int(cx + self.WIDTH  / 2), int(cy + self.HEIGHT / 2))
+            cv2.rectangle(mask, corner_topleft, corner_botright, 255, -1)
         else:
-            cv2.circle(mask, self.CENTER, self.RADIUS, 255, -1)
+            cv2.circle(mask, tuple(self.CENTER), int(self.RADIUS), 255, -1)
         return mask
 
     def skip_frame(self, n: int):
@@ -279,22 +282,27 @@ class VideoProcessor:
         Skip a frame during processing and insert
         placeholder data.
 
-        This method records zeros for positions and
+        This method records NaNs for positions and
         orientations when detection fails, ensuring
-        that the output dataframe preserves frame continuity.
+        that the output dataframe preserves frame continuity
+        with N_POGO entries per frame.
 
         Parameters
         ----------
-            n (int):
-                index of frame to skip
-        
+        n (int):
+            index of frame to skip
+
         Return
         ------
-            n (int):
-                index of next frame to analyze
+        n (int):
+            index of next frame to analyze
         """
+        
+        x = [np.nan] * self.N_POGO
+        y = [np.nan] * self.N_POGO
+        thetas = [np.nan] * self.N_POGO
 
-        self.df = save_datas(self.df, n,[0],[0],[0])
+        self.df = save_datas(self.df, n, x, y, thetas)
         return n + 1
 
     def _adjust_detection(self, diff):
@@ -444,14 +452,10 @@ class VideoProcessor:
                 n += 1
                 pbar.update(1)
 
-                #if n == 30000: # stops at 25 mins #bug here: this does not work if the frame is skipped or something bug advancing line fallback
-                #if n == 2400:
-                    #break
-
         self.video.release()
 
         # Track IDs
-        df_tracked = track_objects(self.df, search_range = self.SEARCH_RANGE)
+        df_tracked = track_objects(self.df, search_range = self.SEARCH_RANGE, memory = self.MEMORY)
 
         # Convert to seconds/cm using params from config
         fps = self.config["FPS"]
@@ -464,6 +468,11 @@ class VideoProcessor:
         # Optional trajectories plot (controlled from .yaml)
         if bool(self.config.get("PLOT_TRAJECTORIES", False)):
             plot_trajectories(self.save_path, "Trajectories", self.config, bg_path = self.background_path)
+        
+        # Visualize gif of the whole video in DEBUG MODE
+        if bool(self.config.get("DEBUG_MODE", False)):
+            print("Rendering and saving the inferred dynamics' gif -- it could require some time.")
+            visualize_gif(self.save_path, self.config, self.background_path)
 
         end = time.time()
         print(f"Processed {n} frames in {round(end - start, 2)}s → {self.save_path}")
