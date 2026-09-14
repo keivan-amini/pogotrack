@@ -14,9 +14,30 @@ Pogotrack is primarily intended for experiments with **[Pogobots](https://pogobo
 
 ## Features
 
-Soon a cool graphics here :wink:
+### From video to trajectories
 
-### Video processing (pose + IDs)
+<p align="center">
+  <img src="img/pipeline.gif"
+       alt="Pogotrack processing pipeline: raw image, arena mask, region-specific segmentation, robot detection, and trajectories"
+       width="650">
+</p>
+
+The pipeline supports the analysis even in phototaxis regions -- it masks the arena, treats the illuminated and dark regions separately, detects robot candidates, validates them geometrically, and links detections over time.
+
+### From trajectories to fields
+
+<p align="center">
+  <img src="img/phototaxis_controller.png"
+       alt="Phototaxis analysis: light occupancy, score and weight fields, and relative density"
+       width="850">
+</p>
+
+Beyond tracking, Pogotrack supports physics-style spatiotemporal analysis: light occupancy, trajectories, internal varaibles such as controller **score** and **weight** fields, and relative-density fields. This makes it possible to connect individual motion, collective behavior, and controller performance in real-experiments.
+
+> Pogotrack is under active development. The current release focuses on
+> `src/video_processing.py`.
+
+## Video processing (pose + IDs)
 Given a video experiment and a background image, the pipeline:
 - Removes background and segments foreground (thresholding).
 - Detects contours for each Pogobot.
@@ -24,7 +45,7 @@ Given a video experiment and a background image, the pipeline:
 - Assigns persistent IDs using tracking utilities [TrackPy](https://soft-matter.github.io/trackpy/v0.7/).
 - Exports a time series of $(x, y, \theta, \mathrm{ID})$ for each agent.
 
-### Dynamics workflow (motion characterization)
+## Dynamics workflow (motion characterization)
 For videos containing systematic PWM sweeps / repeated runs, the dynamics workflow:
 - Trims recordings into run segments.
 - Filters trajectories (e.g., wall interactions, invalid data).
