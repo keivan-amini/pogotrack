@@ -1,7 +1,7 @@
 # Pogotrack
 
 <p align="center">
-  <img src="img/logo.png" alt="Pogotrack logo" width="600">
+  <img src="img/logo.png" alt="Pogotrack logo" width="300">
 </p>
 
 
@@ -19,7 +19,7 @@ Pogotrack is primarily intended for experiments with **[Pogobots](https://pogobo
 <p align="center">
   <img src="img/pipeline.gif"
        alt="Pogotrack processing pipeline: raw image, arena mask, region-specific segmentation, robot detection, and trajectories"
-       width="650">
+       width="300">
 </p>
 
 The pipeline supports the analysis even in phototaxis regions -- it masks the arena, treats the illuminated and dark regions separately, detects robot candidates, validates them geometrically, and links detections over time.
