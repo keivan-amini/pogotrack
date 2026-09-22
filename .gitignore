@@ -8,6 +8,10 @@
 !postprocessing/*.sh
 !postprocessing/*.py
 !postprocessing/*.yaml
+
+# Keep only these two documentation files
+!doc/
+doc/*
 !doc/tutorial_pogotrack.tex
 !doc/tutorial_pogotrack.pdf
 
