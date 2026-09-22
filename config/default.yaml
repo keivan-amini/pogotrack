@@ -116,7 +116,7 @@ RGB_ID:
 # === PHOTOTAXIS ENVIRONMENT === #
 PHOTOTAXIS_ANALYSIS: True   # If True, use dark/light split processing and Hough circles for phototaxis experiments.
 PHOTOTAXIS_FAST: True   # If True, use cached masks/background and ROI-based Hough after the first successful frame.
-PHOTOTAXIS_ROI_HALF_SIZE: 80   # Half-size of square ROI around each previous robot center.
+PHOTOTAXIS_ROI_HALF_SIZE: 70   # Half-size of square ROI around each previous robot center.
 PHOTOTAXIS_FULL_DETECT_EVERY: 0   # If > 0, force one full-frame phototaxis detection every N frames.
 PHOTOTAXIS_LIGHT_CC_USE_ROIS: True
 PHOTOTAXIS_LIGHT_CC_ROI_HALF_SIZE: 50

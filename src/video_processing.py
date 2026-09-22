@@ -14,6 +14,8 @@ default parameters are overwritten by config/default.yaml.
 import time
 import cv2
 cv2.setNumThreads(1)
+import multiprocessing as mp
+import tempfile
 import yaml
 import pandas as pd
 import numpy as np
@@ -28,7 +30,6 @@ from src.utils import (
     get_position,
     get_all_angles,
     track_objects,
-    save_datas,
     convert_datas,
     to_blue_channel,
     create_line_region_masks,
@@ -60,6 +61,44 @@ from src.plot_helpers import (
     _measure_frame_rows,
     save_led_contact_sheet
 )
+
+
+def _progress_log(message):
+    """Write a message without disturbing active tqdm progress bars."""
+    tqdm.write(str(message))
+
+
+def _process_video_chunk_worker(job):
+    """Process one video chunk in a spawned worker and write raw detections."""
+    (
+        video_path,
+        background_path,
+        save_path,
+        config_path,
+        frame_start,
+        frame_end,
+        warmup_start,
+        worker_index,
+        worker_count,
+    ) = job
+
+    processor = VideoProcessor(
+        video_path=video_path,
+        background_path=background_path,
+        save_path=save_path,
+        config_path=config_path,
+    )
+    detections = processor.process(
+        frame_start=frame_start,
+        frame_end=frame_end,
+        warmup_start=warmup_start,
+        finalize=False,
+        show_progress=True,
+        progress_position=worker_index,
+        progress_desc=f"Worker {worker_index + 1}/{worker_count}",
+    )
+    detections.to_csv(save_path, index=False)
+    return save_path
 
 
 
@@ -153,7 +192,7 @@ class VideoProcessor:
         "TRAJECTORY_DPI": 300,
         "PHOTOTAXIS_ANALYSIS": False,
         "PHOTOTAXIS_FAST": True,
-        "PHOTOTAXIS_ROI_HALF_SIZE": 90,
+        "PHOTOTAXIS_ROI_HALF_SIZE": 70,
         "PHOTOTAXIS_LIGHT_CC_USE_ROIS": True,
         "PHOTOTAXIS_LIGHT_CC_ROI_HALF_SIZE": 110,
         "PHOTOTAXIS_FULL_DETECT_EVERY": 0,
@@ -226,6 +265,7 @@ class VideoProcessor:
         self.video_path = video_path
         self.background_path = background_path
         self.save_path = save_path
+        self.config_path = config_path
 
         with open(config_path, "r") as f:
             yaml_config = yaml.safe_load(f) or {}
@@ -256,6 +296,8 @@ class VideoProcessor:
         _add_frames(cli_frames)
 
         self.df = pd.DataFrame(columns=["frame", "x", "y", "theta"])
+        self._data_rows = []
+        self._record_start_frame = 0
 
         self._phototaxis_cache = None
         self._prev_phototaxis_centers = None
@@ -363,10 +405,31 @@ class VideoProcessor:
         y = [np.nan] * self.N_POGO
         thetas = [np.nan] * self.N_POGO
 
-        self.df = save_datas(self.df, n, x, y, thetas)
+        self._append_data_rows(n, x, y, thetas)
         return n + 1
+
+    def _append_data_rows(self, frame, x, y, thetas):
+        """Append one frame's detections without repeatedly copying a DataFrame."""
+        if frame < self._record_start_frame:
+            return
+        if len(x) == 0 or len(y) == 0 or len(thetas) == 0:
+            return
+
+        self._data_rows.extend(
+            (frame, x_value, y_value, theta_value)
+            for x_value, y_value, theta_value in zip(x, y, thetas)
+        )
     
-    def _adjust_detection(self, diff=None, *, mode="classic", frame=None, mask=None):
+    def _adjust_detection(
+        self,
+        diff=None,
+        *,
+        mode="classic",
+        frame=None,
+        mask=None,
+        phot=None,
+        current_circles=None,
+    ):
         """
         Dispatch detection recovery to the classic or phototaxis branch.
         """
@@ -378,7 +441,12 @@ class VideoProcessor:
         if mode == "phototaxis":
             if frame is None or mask is None:
                 raise ValueError("Phototaxis adjustment requires `frame` and `mask`.")
-            return self._adjust_detection_phototaxis(frame, mask)
+            return self._adjust_detection_phototaxis(
+                frame,
+                mask,
+                phot=phot,
+                current_circles=current_circles,
+            )
 
         raise ValueError(f"Unsupported detection mode: {mode}")
 
@@ -435,7 +503,7 @@ class VideoProcessor:
             }
 
             if result["success"]:
-                print("Success with threshold = " + str(t) + ".")
+                _progress_log("Success with threshold = " + str(t) + ".")
                 return result
 
             last_result = result
@@ -459,12 +527,12 @@ class VideoProcessor:
         }
 
         if result["success"]:
-            print("Success with wider area/perimeter ranges.")
+            _progress_log("Success with wider area/perimeter ranges.")
             return result
 
         return result if result["thresh"] is not None else last_result
 
-    def _adjust_detection_phototaxis(self, frame, mask):
+    def _adjust_detection_phototaxis(self, frame, mask, phot=None, current_circles=None):
         """
         Attempt to recover correct Pogobot detections for the phototaxis pipeline.
 
@@ -517,23 +585,99 @@ class VideoProcessor:
             "success": False,
         }
 
-        for dark_t, light_t in candidate_pairs:
-            phot = process_phototaxis_frame(
-                frame=frame,
-                background=self.background,
-                arena_mask=mask,
-                line_cfg=self.DIVIDING_LINE,
-                dark_threshold=dark_t,
-                light_threshold=light_t,
-                light_cc_enabled=bool(self.LIGHT_CONNECTED_COMPONENTS.get("ENABLED", True)),
-                light_min_area=int(self.LIGHT_CONNECTED_COMPONENTS.get("MIN_AREA", 45)),
-                light_connectivity=int(self.LIGHT_CONNECTED_COMPONENTS.get("CONNECTIVITY", 8)),
-                debug=bool(self.config.get("DEBUG_MODE", False)),
-            )
+        if phot is None:
+            phot = self._process_phototaxis_frame(frame, mask)
 
-            circles = detect_circles_with_fallback(phot["out"], self.N_POGO, self.HOUGH_CIRCLES)
+        if self._phototaxis_cache is None:
+            self._prepare_phototaxis_static_data(mask)
+
+        dark_diff = phot.get("dark_diff")
+        light_diff = phot.get("light_diff")
+        predicted_centers = self._get_phototaxis_predicted_centers()
+        missing_centers = self._get_missing_predicted_centers(
+            current_circles,
+            predicted_centers,
+        )
+
+        # First retry locally around the last valid robot positions. This keeps
+        # the exact-N requirement while avoiding a full-frame Hough sweep for
+        # ordinary one- or two-robot misses. Only missing centers are retried.
+        if missing_centers and dark_diff is not None and light_diff is not None:
+            for dark_t, light_t in candidate_pairs:
+                candidate_phot = self._build_phototaxis_frame_from_diffs(
+                    dark_diff,
+                    light_diff,
+                    dark_t,
+                    light_t,
+                    predicted_centers=missing_centers,
+                )
+                circles, x, y, thetas = self._detect_phototaxis_bots_roi(
+                    candidate_phot["out"],
+                    allow_full_fallback=False,
+                    predicted_centers=missing_centers,
+                )
+                base_circles = (
+                    current_circles
+                    if current_circles is not None
+                    else np.empty((0, 3), dtype=np.int32)
+                )
+                merged_circles = np.vstack([base_circles, circles]) if len(circles) else base_circles
+                merged_circles = self._match_circles_to_predicted_centers(
+                    merged_circles,
+                    predicted_centers,
+                    int(self.PHOTOTAXIS_ROI_HALF_SIZE),
+                )
+                x, y = circles_to_centers(merged_circles)
+                thetas = get_all_angles(candidate_phot["out"], y, x)
+                result = {
+                    "contours": [],
+                    "circles": merged_circles,
+                    "x": x,
+                    "y": y,
+                    "thetas": thetas,
+                    "thresh": candidate_phot["out"],
+                    "diff": candidate_phot["out"],
+                    "dark_bin": candidate_phot["dark_bin"],
+                    "light_bin": candidate_phot["light_bin"],
+                    "success": len(merged_circles) == self.N_POGO and len(thetas) == self.N_POGO,
+                }
+                if result["success"]:
+                    _progress_log(f"Success with local phototaxis thresholds dark={dark_t}, light={light_t}.")
+                    return result
+                last_result = result
+
+        # If local recovery cannot assign every expected robot, retain the
+        # original global recovery path, but reuse the already computed image
+        # differences instead of rebuilding masks/background differences for
+        # every threshold pair.
+        for dark_t, light_t in candidate_pairs:
+            if dark_diff is not None and light_diff is not None:
+                candidate_phot = self._build_phototaxis_frame_from_diffs(
+                    dark_diff,
+                    light_diff,
+                    dark_t,
+                    light_t,
+                    predicted_centers=None,
+                )
+            else:
+                candidate_phot = process_phototaxis_frame(
+                    frame=frame,
+                    background=self.background,
+                    arena_mask=mask,
+                    line_cfg=self.DIVIDING_LINE,
+                    dark_threshold=dark_t,
+                    light_threshold=light_t,
+                    light_cc_enabled=bool(self.LIGHT_CONNECTED_COMPONENTS.get("ENABLED", True)),
+                    light_min_area=int(self.LIGHT_CONNECTED_COMPONENTS.get("MIN_AREA", 45)),
+                    light_connectivity=int(self.LIGHT_CONNECTED_COMPONENTS.get("CONNECTIVITY", 8)),
+                    debug=bool(self.config.get("DEBUG_MODE", False)),
+                )
+
+            circles = detect_circles_with_fallback(
+                candidate_phot["out"], self.N_POGO, self.HOUGH_CIRCLES
+            )
             x, y = circles_to_centers(circles)
-            thetas = get_all_angles(phot["out"], y, x)
+            thetas = get_all_angles(candidate_phot["out"], y, x)
 
             result = {
                 "contours": [],
@@ -541,15 +685,15 @@ class VideoProcessor:
                 "x": x,
                 "y": y,
                 "thetas": thetas,
-                "thresh": phot["out"],
-                "diff": phot["out"],
-                "dark_bin": phot["dark_bin"],
-                "light_bin": phot["light_bin"],
+                "thresh": candidate_phot["out"],
+                "diff": candidate_phot["out"],
+                "dark_bin": candidate_phot["dark_bin"],
+                "light_bin": candidate_phot["light_bin"],
                 "success": len(circles) == self.N_POGO and len(thetas) == self.N_POGO,
             }
 
             if result["success"]:
-                print(f"Success with phototaxis thresholds dark={dark_t}, light={light_t}.")
+                _progress_log(f"Success with phototaxis thresholds dark={dark_t}, light={light_t}.")
                 return result
 
             last_result = result
@@ -698,6 +842,43 @@ class VideoProcessor:
             "light_diff": light_diff,
         }
 
+    def _build_phototaxis_frame_from_diffs(
+        self,
+        dark_diff,
+        light_diff,
+        dark_threshold,
+        light_threshold,
+        predicted_centers=None,
+    ):
+        """Rebuild thresholded phototaxis images from cached differences."""
+        cache = self._phototaxis_cache
+        dark_bin = binarize(dark_diff, threshold=dark_threshold)
+        light_bin = binarize(light_diff, threshold=light_threshold)
+
+        if bool(self.LIGHT_CONNECTED_COMPONENTS.get("ENABLED", True)):
+            min_area = int(self.LIGHT_CONNECTED_COMPONENTS.get("MIN_AREA", 45))
+            connectivity = int(self.LIGHT_CONNECTED_COMPONENTS.get("CONNECTIVITY", 8))
+            if bool(self.PHOTOTAXIS_LIGHT_CC_USE_ROIS) and predicted_centers is not None:
+                light_bin = filter_small_components_in_rois(
+                    light_bin,
+                    centers=predicted_centers,
+                    half_size=int(self.PHOTOTAXIS_LIGHT_CC_ROI_HALF_SIZE),
+                    min_area=min_area,
+                    connectivity=connectivity,
+                )
+            else:
+                light_bin = filter_small_components(light_bin, min_area, connectivity)
+
+        out = cv2.bitwise_or(dark_bin, light_bin)
+        out[cache["arena_mask"] == 0] = 0
+        return {
+            "dark_bin": dark_bin,
+            "light_bin": light_bin,
+            "out": out,
+            "dark_diff": dark_diff,
+            "light_diff": light_diff,
+        }
+
     def _clip_roi(self, cx, cy, half_size, shape):
         h, w = shape[:2]
         x1 = max(0, int(cx - half_size))
@@ -706,8 +887,17 @@ class VideoProcessor:
         y2 = min(h, int(cy + half_size + 1))
         return x1, y1, x2, y2
 
-    def _detect_phototaxis_bots_roi(self, binary):
-        if not self._prev_phototaxis_centers:
+    def _detect_phototaxis_bots_roi(
+        self,
+        binary,
+        allow_full_fallback=True,
+        predicted_centers=None,
+    ):
+        centers = predicted_centers
+        if centers is None:
+            centers = self._prev_phototaxis_centers
+
+        if not centers:
             circles = detect_circles_with_fallback(binary, self.N_POGO, self.HOUGH_CIRCLES)
             x, y = circles_to_centers(circles)
             thetas = get_all_angles(binary, y, x)
@@ -717,7 +907,7 @@ class VideoProcessor:
         circles_all = []
 
         t_loop = self._tic()
-        for cx, cy in self._prev_phototaxis_centers:
+        for cx, cy in centers:
             x1, y1, x2, y2 = self._clip_roi(cx, cy, half_size, binary.shape)
             roi = binary[y1:y2, x1:x2]
             if roi.size == 0:
@@ -748,23 +938,19 @@ class VideoProcessor:
             if len(circles_roi) == 0:
                 continue
 
-            target = np.array([cx - x1, cy - y1], dtype=np.float32)
-            centers_roi = circles_roi[:, :2].astype(np.float32)
-            d2 = np.sum((centers_roi - target) ** 2, axis=1)
-            best = circles_roi[int(np.argmin(d2))].copy()
-            best[0] += x1
-            best[1] += y1
-            circles_all.append(best)
+            circles_roi = circles_roi.copy()
+            circles_roi[:, 0] += x1
+            circles_roi[:, 1] += y1
+            circles_all.extend(circles_roi)
 
         self._add_timing("phot_roi_loop", t_loop)
-        if len(circles_all) == 0:
+        circles = self._match_circles_to_predicted_centers(
+            circles_all,
+            centers,
+            half_size,
+        )
+        if len(circles) < len(centers) and allow_full_fallback:
             circles = detect_circles_with_fallback(binary, self.N_POGO, self.HOUGH_CIRCLES)
-        else:
-            circles = deduplicate_circles(np.array(circles_all, dtype=np.int32))
-            if len(circles) < self.N_POGO:
-                full_circles = detect_circles_with_fallback(binary, self.N_POGO, self.HOUGH_CIRCLES)
-                if len(full_circles) > len(circles):
-                    circles = full_circles
 
         x, y = circles_to_centers(circles)
         t_theta = self._tic()
@@ -772,11 +958,78 @@ class VideoProcessor:
         self._add_timing("phot_theta", t_theta)
         return circles, x, y, thetas
 
+    def _get_missing_predicted_centers(self, circles, predicted_centers):
+        """Return expected centers that were not represented by current circles."""
+        if predicted_centers is None:
+            return []
+        if circles is None or len(circles) == 0:
+            return list(predicted_centers)
+
+        unique_circles = deduplicate_circles(np.asarray(circles, dtype=np.float32))
+        if len(unique_circles) == 0:
+            return list(predicted_centers)
+
+        targets = np.asarray(predicted_centers, dtype=np.float32)
+        candidates = unique_circles[:, :2].astype(np.float32)
+        distances = np.sqrt(np.sum((targets[:, None, :] - candidates[None, :, :]) ** 2, axis=2))
+        used_targets = set()
+        used_candidates = set()
+        max_distance = int(self.PHOTOTAXIS_ROI_HALF_SIZE)
+
+        for distance, target_idx, candidate_idx in sorted(
+            (float(distances[target_idx, candidate_idx]), target_idx, candidate_idx)
+            for target_idx in range(len(targets))
+            for candidate_idx in range(len(candidates))
+        ):
+            if distance > max_distance:
+                break
+            if target_idx in used_targets or candidate_idx in used_candidates:
+                continue
+            used_targets.add(target_idx)
+            used_candidates.add(candidate_idx)
+
+        return [center for idx, center in enumerate(predicted_centers) if idx not in used_targets]
+
+    def _match_circles_to_predicted_centers(self, circles, predicted_centers, max_distance):
+        """Assign at most one circle to each expected robot center."""
+        if predicted_centers is None or len(predicted_centers) == 0 or len(circles) == 0:
+            return np.empty((0, 3), dtype=np.int32)
+
+        unique_circles = deduplicate_circles(np.asarray(circles, dtype=np.float32))
+        if len(unique_circles) == 0:
+            return np.empty((0, 3), dtype=np.int32)
+
+        targets = np.asarray(predicted_centers, dtype=np.float32)
+        candidates = unique_circles[:, :2].astype(np.float32)
+        distances = np.sqrt(np.sum((targets[:, None, :] - candidates[None, :, :]) ** 2, axis=2))
+
+        assignments = []
+        used_targets = set()
+        used_candidates = set()
+        for distance, target_idx, candidate_idx in sorted(
+            (float(distances[target_idx, candidate_idx]), target_idx, candidate_idx)
+            for target_idx in range(len(targets))
+            for candidate_idx in range(len(candidates))
+        ):
+            if distance > max_distance:
+                break
+            if target_idx in used_targets or candidate_idx in used_candidates:
+                continue
+            used_targets.add(target_idx)
+            used_candidates.add(candidate_idx)
+            assignments.append((target_idx, candidate_idx))
+
+        assignments.sort()
+        if not assignments:
+            return np.empty((0, 3), dtype=np.int32)
+        return np.asarray(
+            [unique_circles[candidate_idx] for _, candidate_idx in assignments],
+            dtype=np.int32,
+        )
+
     def _update_phototaxis_state(self, x, y):
         if len(x) == self.N_POGO and len(y) == self.N_POGO:
             self._prev_phototaxis_centers = list(zip(x, y))
-        else:
-            self._prev_phototaxis_centers = None
 
     def _tic(self):
         return time.perf_counter()
@@ -789,12 +1042,12 @@ class VideoProcessor:
             return
 
         total = sum(self._timings.values())
-        print(f"\n--- Timing summary after {self._timings_count} frames ---")
+        _progress_log(f"\n--- Timing summary after {self._timings_count} frames ---")
         for key, value in sorted(self._timings.items(), key=lambda kv: kv[1], reverse=True):
             avg_ms = 1000.0 * value / self._timings_count
             frac = (100.0 * value / total) if total > 0 else 0.0
-            print(f"{key:28s}: {avg_ms:8.3f} ms/frame   ({frac:5.1f}%)")
-        print("---------------------------------------------\n")
+            _progress_log(f"{key:28s}: {avg_ms:8.3f} ms/frame   ({frac:5.1f}%)")
+        _progress_log("---------------------------------------------\n")
 
 
 
@@ -1033,45 +1286,91 @@ class VideoProcessor:
             )
 
         elapsed = time.time() - start
-        print(f"RGB CSV: {rgb_path}")
+        _progress_log(f"RGB CSV: {rgb_path}")
         if debug_enabled:
-            print(f"Debug directory: {debug_dir}")
-        print(f"Processed {n} frames in {elapsed:.2f}s")
+            _progress_log(f"Debug directory: {debug_dir}")
+        _progress_log(f"Processed {n} frames in {elapsed:.2f}s")
 
         return df_rgb
 
+    def _finalize_dataframe(self, df):
+        """Run global linking, unit conversion, and final output writing."""
+        self.df = df
+        df_tracked = track_objects(
+            self.df,
+            search_range=self.SEARCH_RANGE,
+            memory=self.MEMORY,
+        )
+
+        df_transformed = convert_datas(
+            df_tracked,
+            self.config["FPS"],
+            self.config["POGOBOT_DIAMETER_CM"],
+            self.config["PIXEL_DIAMETER"],
+        )
+        df_transformed.to_csv(self.save_path, index=False)
+
+        if bool(self.config.get("PLOT_TRAJECTORIES", False)):
+            plot_trajectories(
+                self.save_path,
+                "Trajectories",
+                self.config,
+                bg_path=self.background_path,
+            )
+
+        return df_transformed
 
 
-    def process(self):
+
+    def process(
+        self,
+        frame_start=0,
+        frame_end=None,
+        warmup_start=None,
+        finalize=True,
+        show_progress=True,
+        progress_position=0,
+        progress_desc=None,
+    ):
         """
-        Run the full video processing pipeline. WRITE DOCSTRINGS!!
+        Run the video processing pipeline, optionally over a frame range.
+
+        `warmup_start` allows chunk workers to process context frames before
+        `frame_start` without including those detections in their output.
         """
         start = time.time()
         self._load_video_and_background()
         mask = self._create_mask(rectangular=self.RECT_MASK)
 
         total_frames = int(self.video.get(cv2.CAP_PROP_FRAME_COUNT))
-        n = 0
+        frame_start = int(frame_start)
+        frame_end = total_frames if frame_end is None else int(frame_end)
+        if not 0 <= frame_start <= frame_end <= total_frames:
+            raise ValueError("Invalid frame range.")
 
-        ### CHANGE, miglioriamo i parametri per questa scena temporale
-        #start_frame = int(20 * 14.5 * 60)
-        #end_frame = int(20 * 25 * 60)
+        warmup_start = frame_start if warmup_start is None else int(warmup_start)
+        warmup_start = max(0, min(warmup_start, frame_start))
+        self._record_start_frame = frame_start
+        self._data_rows = []
+        self._prev_phototaxis_centers = None
+        self._phototaxis_cache = None
 
-        #self.video.set(cv2.CAP_PROP_POS_FRAMES, start_frame)
-        #n = start_frame
-        ### CHANGE
+        self.video.set(cv2.CAP_PROP_POS_FRAMES, warmup_start)
+        n = warmup_start
 
         if not self.PHOTOTAXIS_ANALYSIS:
             background_blue = to_blue_channel(self.background)
             background_masked = cv2.bitwise_and(background_blue, background_blue, mask=mask)
 
-        with tqdm(total=total_frames, desc="Processing video", unit="frame") as pbar:
-            while self.video.isOpened():
-
-                ### CHANGE
-                #if n > end_frame:
-                    #break
-                ### CHANGE
+        with tqdm(
+            total=frame_end - frame_start,
+            desc=progress_desc or "Processing video",
+            unit="frame",
+            disable=not show_progress,
+            position=progress_position,
+            leave=True,
+        ) as pbar:
+            while self.video.isOpened() and n < frame_end:
 
                 t_frame = self._tic()
                 ret, frame = self.video.read()
@@ -1123,12 +1422,17 @@ class VideoProcessor:
                     detected_ok = (len(thetas) == self.N_POGO)
 
                 if not detected_ok:
-                    print(f"Frame {n}: detection mismatch. Attempting fallback...")
+                    _progress_log(f"Frame {n}: detection mismatch. Attempting fallback...")
 
                     if self.PHOTOTAXIS_ANALYSIS:
-                        self._prev_phototaxis_centers = None
                         t_fb = self._tic()
-                        result = self._adjust_detection(frame=frame, mask=mask, mode="phototaxis")
+                        result = self._adjust_detection(
+                            frame=frame,
+                            mask=mask,
+                            mode="phototaxis",
+                            phot=phot,
+                            current_circles=circles,
+                        )
                         self._add_timing("phot_fallback", t_fb)
                     else:
                         result = self._adjust_detection(diff=diff, mode="classic")
@@ -1145,7 +1449,7 @@ class VideoProcessor:
                     success = result["success"]
 
                     if not success:
-                        print(f"Frame {n}: Still {len(thetas)} bots detected. Skipping frame.")
+                        _progress_log(f"Frame {n}: Still {len(thetas)} bots detected. Skipping frame.")
 
                         if bool(self.config.get("DEBUG_MODE", False)):
                             if self.PHOTOTAXIS_ANALYSIS:
@@ -1170,7 +1474,8 @@ class VideoProcessor:
                                 )
 
                         n = self.skip_frame(n)
-                        pbar.update(1)
+                        if n >= frame_start:
+                            pbar.update(1)
                         self._add_timing("frame_total", t_frame)
                         self._timings_count += 1
                         self._print_timing_summary(every=50000)                     
@@ -1196,30 +1501,89 @@ class VideoProcessor:
                 if self.PHOTOTAXIS_ANALYSIS:
                     self._update_phototaxis_state(x, y)  
 
-                self.df = save_datas(self.df, n, x, y, thetas)
+                self._append_data_rows(n, x, y, thetas)
                 self._add_timing("frame_total", t_frame)
                 self._timings_count += 1
                 self._print_timing_summary(every=5000)
                 n += 1
-                pbar.update(1)
+                if n > frame_start:
+                    pbar.update(1)
 
         self.video.release()
 
-        df_tracked = track_objects(self.df, search_range=self.SEARCH_RANGE, memory=self.MEMORY)
+        self.df = pd.DataFrame(
+            self._data_rows,
+            columns=["frame", "x", "y", "theta"],
+        )
 
-        fps = self.config["FPS"]
-        pogobot_diameter_cm = self.config["POGOBOT_DIAMETER_CM"]
-        pixel_diameter = self.config["PIXEL_DIAMETER"]
-        df_transformed = convert_datas(df_tracked, fps, pogobot_diameter_cm, pixel_diameter)
+        if not finalize:
+            return self.df
 
-        df_transformed.to_csv(self.save_path, index=False)
-
-        if bool(self.config.get("PLOT_TRAJECTORIES", False)):
-            plot_trajectories(self.save_path, "Trajectories", self.config, bg_path=self.background_path)
-
-        if bool(self.config.get("DEBUG_MODE", False)): #create a boolean for this !!!! plus, visualization parameters are WRONG for ESPCI arena
-            pass
-            #visualize_gif(self.save_path, self.config, self.background_path)
+        self._finalize_dataframe(self.df)
 
         end = time.time()
         print(f"Processed {n} frames in {round(end - start, 2)}s → {self.save_path}")
+
+    def process_parallel(self, workers=2, warmup_frames=50):
+        """Process contiguous video chunks in spawned workers.
+
+        Workers write raw detections to temporary CSV files. The parent then
+        concatenates the chunks and performs one global Trackpy linking pass.
+        """
+        if self.config.get("RGB_ID_ANALYSIS", False):
+            raise ValueError("Multiprocessing is only supported for process().")
+        if self.frames_to_visualize:
+            raise ValueError("Frame visualization is not supported with multiprocessing.")
+
+        workers = int(workers)
+        warmup_frames = int(warmup_frames)
+        if workers < 2:
+            return self.process()
+        if warmup_frames < 0:
+            raise ValueError("warmup_frames must be non-negative.")
+
+        metadata_cap = cv2.VideoCapture(self.video_path)
+        total_frames = int(metadata_cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        metadata_cap.release()
+        if total_frames <= 0:
+            raise RuntimeError(f"Could not read frames from {self.video_path!r}.")
+
+        workers = min(workers, total_frames)
+        boundaries = np.linspace(0, total_frames, workers + 1, dtype=int)
+
+        with tempfile.TemporaryDirectory(prefix="pogotrack_chunks_") as tmp_dir:
+            jobs = []
+            for index in range(workers):
+                frame_start = int(boundaries[index])
+                frame_end = int(boundaries[index + 1])
+                chunk_path = str(Path(tmp_dir) / f"chunk_{index:03d}.csv")
+                jobs.append(
+                    (
+                        self.video_path,
+                        self.background_path,
+                        chunk_path,
+                        self.config_path,
+                        frame_start,
+                        frame_end,
+                        max(0, frame_start - warmup_frames),
+                        index,
+                        workers,
+                    )
+                )
+
+            context = mp.get_context("spawn")
+            tqdm_lock = context.RLock()
+            tqdm.set_lock(tqdm_lock)
+            with context.Pool(
+                processes=workers,
+                initializer=tqdm.set_lock,
+                initargs=(tqdm_lock,),
+            ) as pool:
+                chunk_paths = pool.map(_process_video_chunk_worker, jobs)
+
+            chunk_frames = [pd.read_csv(path) for path in chunk_paths]
+
+        merged = pd.concat(chunk_frames, ignore_index=True)
+        merged = merged.sort_values("frame", kind="stable").reset_index(drop=True)
+        self._finalize_dataframe(merged)
+        print(f"Processed {total_frames} frames with {workers} workers → {self.save_path}")

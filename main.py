@@ -49,6 +49,10 @@ def main():
     parser.add_argument("--background", required = True, help = "Path to background image (.bmp)")
     parser.add_argument("--output", required = True, help = "Path to save output CSV")
     parser.add_argument("--config", default = "config/default.yaml", help = "Path to YAML config file")
+    parser.add_argument("--workers", default = 1, type = int,
+                        help = "Number of multiprocessing video workers (phototaxis only)")
+    parser.add_argument("--warmup-frames", default = 50, type = int,
+                        help = "Context frames processed before each parallel chunk")
     parser.add_argument("--visualize", required = False, nargs = "+", type = int,
                         help = "Frame numbers to visualize contours for (space-separated)")
     args = parser.parse_args()
@@ -66,7 +70,13 @@ def main():
     )
 
     if bool(vp.config.get("RGB_ID_ANALYSIS", False)):
+        if args.workers != 1:
+            parser.error("--workers is not supported with RGB_ID_ANALYSIS")
         vp.process_rgb_id()
+    elif args.workers > 1:
+        if args.visualize:
+            parser.error("--visualize is not supported with --workers")
+        vp.process_parallel(workers=args.workers, warmup_frames=args.warmup_frames)
     else:
         vp.process()
 
