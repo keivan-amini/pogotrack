@@ -85,11 +85,23 @@ pogotrack/
 ## Installation
 ```bash
 # From the repo root
-python -m venv .venv
+python3.13 -m venv .venv
 source .venv/bin/activate
 
 python -m pip install -U pip
 pip install -r requirements.txt
+```
+
+The supported runtime is CPython 3.11–3.13; CPython 3.13 is recommended.
+The dynamics workflow also requires the `ffmpeg` command-line program to be
+installed separately and available on `PATH`.
+
+On some Homebrew macOS installations, Python 3.13 needs Homebrew's `expat`
+library visible while creating the virtual environment. If `venv` fails during
+`ensurepip`, run this before the commands above:
+
+```bash
+export DYLD_LIBRARY_PATH="$(brew --prefix expat)/lib${DYLD_LIBRARY_PATH:+:$DYLD_LIBRARY_PATH}"
 ```
 ---
 
@@ -98,7 +110,7 @@ pip install -r requirements.txt
 Run the main script with:
 
 ```bash
-python3 -m main \
+python3.13 -m main \
   --video data/example.mp4 \
   --background data/bkg.bmp \
   --output results/tracking.csv \

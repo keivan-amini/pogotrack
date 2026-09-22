@@ -34,84 +34,18 @@ RGB_ID:
   RHO: 20
   DETECT_ON_FRAME: 0
 
-
-
-
-
-
-
-
-
-
-
-  STATIC_BOTS: true
-  SAVE_RGB_CSV: true
-  RGB_CSV_PREFIX: "RGB_"
-
+  # Region labels are used by optional RGB debug images.
   REGION_TEST_ON_UNFLIPPED_COORDS: true
-  LIGHT_SIDE: negative   # or positive
-  DEBUG_LIGHT_CLASSIFICATION: true
-  DEBUG_LIGHT_CLASSIFICATION_FRAMES: [0]
-  MAX_DISTANCE: 55.0
-  DEBUG_RGB_FRAMES: [3:20]
-  DEBUG_RGB_DIR: "rgb_debug"
-  DEBUG_RGB_ZOOM_SIZE: 80
-  DEBUG_RGB_CONTACT_COLS: 6
 
-  USE_CANDIDATE_FAMILY: false
-  OFF_THRESHOLD_MAX: 80
-  OFF_THRESHOLD_SUM: 120
-  DEBUG_REGION_FRAMES: [3:20]
-  DEBUG_REGION_DIR: "region_debug"
-
-  OFF_THRESHOLD_MAX: 80
-  OFF_THRESHOLD_SUM: 120
-  OFF_BASELINE_DISTANCE: 45.0
-  DEBUG_REGION_FRAMES: [50,51,52,53]
-  DEBUG_REGION_DIR: "region_debug"
-  
-  
   DEBUG_RGB: true
   DEBUG_RGB_DIR: "rgb_id_debug"
-
-  # If empty, save every DEBUG_RGB_EVERY_N-th frame.
   DEBUG_RGB_FRAMES: []
   DEBUG_RGB_EVERY_N: 1
-
   DEBUG_RGB_ZOOM_SIZE: 96
   DEBUG_RGB_CONTACT_COLS: 6
   DEBUG_RGB_GIF: "leds.gif"
   DEBUG_RGB_GIF_DURATION: 0.12
-  
-  
-  REFS:
-    base:
-      0: {R: 118.0, G:  22.0, B:  15.0}
-      1: {R: 158.0, G:  45.0, B:  14.0}
-      2: {R: 190.0, G:  68.0, B:  14.0}
-      3: {R: 223.0, G: 118.0, B:  16.0}
 
-      4: {R:  15.0, G: 147.0, B:  16.0}
-      5: {R:  23.0, G: 198.0, B:  22.0}
-      6: {R:  39.0, G: 232.0, B:  28.0}
-
-      7: {R:   6.0, G:  34.0, B: 110.0}
-      8: {R:   8.0, G:  52.0, B: 142.0}
-      9: {R:  185.0, G: 232.0, B: 70.0}
-
-    light:
-      0: {R: 168.0, G:  22.0, B:  10.0}
-      1: {R: 190.0, G:  18.0, B:  10.0}
-      2: {R: 214.0, G:  15.0, B:  10.0}
-      3: {R: 233.0, G: 115.0, B:  13.0}
-
-      4: {R:  18.0, G: 142.0, B:  17.0}
-      5: {R:  20.0, G: 190.0, B:  20.0}
-      6: {R:  28.0, G: 228.0, B:  28.0}
-
-      7: {R:  28.0, G:  33.0, B:  85.0}
-      8: {R:  28.0, G:  50.0, B: 110.0}
-      9: {R:  215.0, G: 245.0, B: 70.0}
 
 # === PHOTOTAXIS ENVIRONMENT === #
 PHOTOTAXIS_ANALYSIS: True   # If True, use dark/light split processing and Hough circles for phototaxis experiments.

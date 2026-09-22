@@ -5,6 +5,13 @@ through a CLI, launching the whole pogotrack pipeline.
 
 import argparse
 import os
+import sys
+
+if sys.version_info < (3, 11):
+    raise RuntimeError(
+        "Pogotrack requires Python 3.11 or newer; use python3.13 to run it."
+    )
+
 from src.video_processing import VideoProcessor
 
 def main():
@@ -24,7 +31,7 @@ def main():
 
     Example:
 
-    /usr/bin/python3 -m main                 
+    python3.13 -m main
         --video data/example.mp4 
         --background data/bkg.bmp 
         --output results/tracking.csv 

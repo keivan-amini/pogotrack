@@ -41,21 +41,12 @@ from src.utils import (
     detect_circles_with_fallback,
     circles_to_centers,
     compute_led_positions,
-    extract_square_roi,
-    measure_rgb_mean,
-    save_rgb_datas,
-    decode_digit_from_position_and_rgb,
-    transform_pose_columns,
-    _build_rgb_rows,
 )
 
 from src.plot_helpers import (
     debug_frame,
     visualize_contours,
     plot_trajectories,
-    visualize_gif,
-    save_rgb_debug_visualization,
-    save_region_debug_visualization,
     save_rgb_arena_debug_view,
     save_led_debug_gif,
     _measure_frame_rows,
@@ -232,9 +223,6 @@ class VideoProcessor:
             "GAMMA": 80,
             "RHO": 20,
             "DETECT_ON_FRAME": 0,
-            "STATIC_BOTS": True,
-            "SAVE_RGB_CSV": True,
-            "RGB_CSV_PREFIX": "RGB_",
         },
         
     }
@@ -339,6 +327,11 @@ class VideoProcessor:
                 normalized_yaml[key_up] = coerce_bool(v)
 
         merged = {**self.DEFAULTS, **normalized_yaml}
+        # Keep plotting options grouped in YAML while exposing them at the
+        # top level to the legacy visualization helpers.
+        plotting_config = normalized_yaml.get("PLOTTING")
+        if isinstance(plotting_config, dict):
+            merged.update(plotting_config)
         for key, value in merged.items():
             setattr(self, key, value)
         return merged
@@ -1050,41 +1043,6 @@ class VideoProcessor:
         _progress_log("---------------------------------------------\n")
 
 
-
-    def _detect_static_bots_for_rgb(self, frame, mask, background_masked):
-        frame_blue = to_blue_channel(frame)
-        frame_masked = cv2.bitwise_and(frame_blue, frame_blue, mask=mask)
-
-        diff = get_difference(
-            frame_masked,
-            background_masked,
-            bool(self.config.get("DEBUG_MODE", False))
-        )
-        thresh = binarize(diff, threshold=self.THRESHOLD)
-        contours = find_contours(thresh, area_params=self.AREAS, peri_params=self.PERIMETERS)
-        x, y = get_position(contours)
-        thetas = get_all_angles(thresh, y, x)
-
-        if len(thetas) != self.N_POGO:
-            result = self._adjust_detection(diff=diff, mode="classic")
-            contours = result["contours"]
-            x = result["x"]
-            y = result["y"]
-            thetas = result["thetas"]
-            thresh = result["thresh"]
-            diff = result["diff"]
-
-        success = len(thetas) == self.N_POGO
-        return {
-            "success": success,
-            "contours": contours,
-            "x": x,
-            "y": y,
-            "thetas": thetas,
-            "diff": diff,
-            "thresh": thresh,
-            "frame_masked": frame_masked,
-        }
 
     def _detect_static_rgb_bots(self, frame_raw, mask, background_masked, gamma, rho, frame_idx):
         """

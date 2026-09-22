@@ -12,13 +12,6 @@ from scipy.fft import fft, fftfreq
 from scipy.signal import butter, filtfilt
 from scipy.optimize import least_squares
 
-
-from .plotting import (
-    plot_circle_fit,
-)
-
-
-
 def butter_lowpass(cutoff: float, fs: float, order: int = 4):
 
     """

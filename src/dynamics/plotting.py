@@ -36,68 +36,6 @@ rc("font", family="serif")
 
 
 
-def plot_circle_fit(pog_name, pwm, trial, t_min, t_max, x_data, y_data, xc, yc, R, save_path):
-
-    """
-    Plot the trajectory of a pogobot together with the fitted circle
-    representing its local radius of curvature.
-
-    Parameters
-    ----------
-    pog_name : str
-        Pogobot identifier (e.g. 'pog_01').
-    pwm : int
-        PWM value of the trial.
-    trial : int
-        Trial index for the measurement.
-    t_min, t_max : float
-        Start and end times (in seconds) of the subset used for circle fitting.
-    x_data, y_data : np.ndarray
-        Subset of trajectory coordinates used in the fit.
-    xc, yc : float
-        Estimated coordinates of the circle center.
-    R : float
-        Estimated circle radius (cm).
-    save_path : str or None
-        If not None, path where the figure will be saved. If None,
-        the figure will be shown interactively.
-    """
-
-    _, ax = plt.subplots(figsize=(6, 6))
-    ax.scatter(x_data, y_data, s=1)
-    ax.plot(x_data, y_data, "b", label="Trajectory", lw=1)
-
-    theta = np.linspace(0, 2 * np.pi, 100)
-    x_circle = xc + R * np.cos(theta)
-    y_circle = yc + R * np.sin(theta)
-
-    plt.title(
-        rf"Pogobot = {pog_name.replace('pog_', '')}, "
-        rf"PWM = {pwm}, Trial = {trial}, "
-        rf"$t_1 = {np.round(t_min, 2)}\,s$, "
-        rf"$t_2 = {np.round(t_max, 2)}\,s$"
-    )
-
-    ax.plot(
-        x_circle,
-        y_circle,
-        "r--",
-        label=rf"Fitted Circle: $R = {np.round(R,2)}\,\mathrm{{cm}}$",
-        lw=1,
-        alpha=0.5,
-    )
-
-    ax.set_xlabel(r"$x$ (cm)")
-    ax.set_ylabel(r"$y$ (cm)")
-    ax.axis("equal")
-    ax.grid(True)
-    ax.legend()
-
-    if save_path:
-        plt.savefig(save_path, dpi = 400)
-    plt.close()
-
-
 def plot_quantity(df: pd.DataFrame, pog_name: str,
                   name_pogs: list, save_path: str,
                   quantity: str, plot_config: dict):
