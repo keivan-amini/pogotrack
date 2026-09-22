@@ -5,6 +5,9 @@
 !src/
 !config/
 !postprocessing/
+!postprocessing/*.sh
+!postprocessing/*.py
+!postprocessing/*.yaml
 
 !requirements.txt
 !README.md
