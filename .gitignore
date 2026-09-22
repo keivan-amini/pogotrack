@@ -8,6 +8,8 @@
 !postprocessing/*.sh
 !postprocessing/*.py
 !postprocessing/*.yaml
+!doc/tutorial_pogotrack.tex
+!doc/tutorial_pogotrack.pdf
 
 !requirements.txt
 !README.md
