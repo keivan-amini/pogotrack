@@ -1,4 +1,10 @@
-**/__pycache__/
-**/abcd/
-results/
-.DS_Store
+# Ignore everything
+*
+
+# Do not ignore
+!src/
+!config/
+
+!requirements.txt
+!README.md
+!main.py

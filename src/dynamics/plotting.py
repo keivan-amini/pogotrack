@@ -2,6 +2,26 @@
 Module containing plotting functions aimed
 at the study of the pogobots' characterization
 dynamics.
+
+Some colors I've been used:
+
+Blues - tpu
+
+Pastel blue: #6baed6
+Medium blue: "skyblue"
+Dark blue: "steelblue"
+
+Greens - toothbrushes
+
+Pastel green: #80EF80
+Medium green: "mediumseagreen"
+Dark green: "seagreen"
+
+Reds - wheels
+
+Pastel red: #e07b91
+Medium red: "lightcoral"
+Dark red: "firebrick"
 """
 
 import matplotlib.pyplot as plt
@@ -241,12 +261,12 @@ def plot_msd_grid(all_trials_per_pwm: dict,
             ax.set_xticks([0,1,2])
             ax.set_yticks([0,50,100])
 
-        ax.set_title(f"PWM = {pwm}")
+        ax.set_title(rf"$\textbf{{{pwm}}}$")
 
         if row == nrows - 1:
             ax.set_xlabel(r"$\tau^2$ (s$^2$)")
         if col == 0:
-            ax.set_ylabel(r"MSD (cm$^2$)")   
+            ax.set_ylabel(r"MSD (cm$^2$)")
 
 
     if save_path:
@@ -405,9 +425,14 @@ def plot_msd_all(all_trials_per_pwm: dict,
 
             msd_list.append(msd)
 
-        if len(msd_list) > 0:
-            msd_mean = np.mean(msd_list, axis=0)
-            ax.plot(taus_common, msd_mean, color=color, lw=1.7, alpha=1)
+        try:
+            if msd_list:
+                msd_mean = np.mean(msd_list, axis=0)
+                ax.plot(taus_common, msd_mean, color=color, lw=1.7, alpha=1)
+        except Exception as e:
+            lengths = [len(a) for a in msd_list]
+            print(f"[plot_msd_all] ⚠️ Could not compute mean for PWM={pwm}. "
+                f"Trial MSD lengths={lengths}. Error: {e}")
 
     ax.set_xlabel(r"$\tau^2$ (s$^2$)")
     ax.set_ylabel(r"MSD (cm$^2$)")

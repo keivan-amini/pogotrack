@@ -1,22 +1,17 @@
 # === SETTING =========
 N_POGO: 1                     # Expected number of Pogobots in the arena.
 NAME_POGS:                    # Pogobot identifiers for dynamics extraction
-  - "pog_60"
-  - "pog_84"
-  - "pog_85"
-  - "pog_87"
+  - "pog_14"
   - "pog_88"
-  - "pog_91"
-  - "pog_95"
-  - "pog_130"
-  - "pog_160"
-  - "pog_178"
+  - "pog_92"
+  - "pog_173"
+  - "pog_177"
 
 # === VIDEO CUTTING PARAMETERS ===
 RUN_DURATION: 6              # Duration (s) of each Pogobot run
-PAUSE_DURATION: 1.845       # Pause (s) between runs in combined video
-DEFAULT_START_TIME: 5.2        # Offset (s) before first run
-TESTED_PWM: [200, 400, 500, 600, 700, 800, 900, 950, 1023]
+PAUSE_DURATION: 1.86      # Pause (s) between runs in combined video
+DEFAULT_START_TIME: 5     # Offset (s) before first run
+TESTED_PWM: [100, 200, 300, 400]
 TRIALS_PER_PWM: 10            # Trials for each predefined PWM
 
 # === DATA FILTERING ===
@@ -33,16 +28,16 @@ POGOBOT_DIAMETER_CM: 4.975  # Pogobot physical diameter in centimeters.
 PIXEL_DIAMETER: 97.01       # Pogobot apparent diameter in pixels (calibration).
 
 # === EXTRACTION PARAMETERS === #
-MAX_TAU_SECONDS: 1.5
-TAUS_PERCENTAGE: 0.3
-T_SUBSET: 1
+MAX_TAU_SECONDS: 5 # 1.5
+TAUS_PERCENTAGE: 0.3 # 0.3
+T_SUBSET: 0.045 #For toothbrushes: try 0.045 + Filtering < log(0.8). Other locomotion: T_SUBSET = 2.5
 
 # === PLOTTING PARAMETERS === #
 plotting:
   v_msd:
     symbol: "$v_{MSD}$"
     unit: "(cm/s)"
-    ylim: [-0.3, 9]
+    ylim: [-0.3, 30]
   omega_fft:
     symbol: "$\\Omega_{FFT}$"
     unit: "(rad/s)"
@@ -54,8 +49,13 @@ plotting:
   R:
     symbol: "$R$"
     unit: "(cm)"
-    ylim: [-10, 200]
+    ylim: [-10, 500]
   omega_noise:
     symbol: "$\\langle | \\Omega_{N} | \\rangle $"
     unit: "(rad/s)"
     ylim: [-0.3, 5]
+  omega_msd:
+    symbol: "$\\Omega_{MSD}$"
+    unit: "(rad/s)"
+    ylim: [-0.3, 5]
+  

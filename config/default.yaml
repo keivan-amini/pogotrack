@@ -1,15 +1,16 @@
 # === GLOBAL DEBUGGING ===
-DEBUG_MODE: true     # If true, debug plotting helpers (e.g., frame visualizations) will run. If false, they no-op.
-PLOT_TRAJECTORIES: true    # If True, plot_trajectories() will run after tracking
+DEBUG_MODE: false     # If true, debug plotting helpers (e.g., frame visualizations) will run. If false, they no-op.
+PLOT_TRAJECTORIES: false    # If True, plot_trajectories() will run after tracking
 
 # === VIDEO PROCESSING PARAMETERS ===
-N_POGO: 24              # Expected number of Pogobots in the arena.
+N_POGO: 64
 THRESHOLD: 50          # Binarization threshold for foreground segmentation.
 AREAS: [1000, 10000]    # [MIN, MAX] contour area in pixels^2 used to accept detected blobs.
 PERIMETERS: [100, 900] # [MIN, MAX] contour perimeter in pixels used to accept detected blobs.
 CENTER: [1512, 1450]   # Arena center in pixels (X, Y).
-RADIUS: 1380           # Arena radius in pixels for the circular mask.
-SEARCH_RANGE: 200      # Trackpy search range (in pixels) to link detections across frames.
+RADIUS: 1380    #1380       # Arena radius in pixels for the circular mask.
+SEARCH_RANGE: 200      # Trackpy search range (in pixels) to link detections across frames. it was 180 for t_5 analysis
+MEMORY: 5              # Max frames number during which a pogobot can disappear, then reappear nearby, and be considered the same particle.
 
 RECT_MASK: false       # Change circular masking to rectangular masking
 WIDTH: 0               # Recutangular mask width (requires RECT_MASK)
@@ -22,6 +23,135 @@ FALLBACK_PERIMETERS: [100, 900] # Fallback perimeters params
 FPS: 20             # Frames-per-second to convert frame index → time in seconds.
 POGOBOT_DIAMETER_CM: 4.975  # Pogobot physical diameter in centimeters.
 PIXEL_DIAMETER: 97.01       # Pogobot apparent diameter in pixels (calibration).
+
+# === RGB-ID ANALYSIS === #
+
+RGB_ID_ANALYSIS: False
+
+RGB_ID:
+  ROI_SIZE: 30
+  GAMMA: 80
+  RHO: 20
+  DETECT_ON_FRAME: 0
+
+
+
+
+
+
+
+
+
+
+
+  STATIC_BOTS: true
+  SAVE_RGB_CSV: true
+  RGB_CSV_PREFIX: "RGB_"
+
+  REGION_TEST_ON_UNFLIPPED_COORDS: true
+  LIGHT_SIDE: negative   # or positive
+  DEBUG_LIGHT_CLASSIFICATION: true
+  DEBUG_LIGHT_CLASSIFICATION_FRAMES: [0]
+  MAX_DISTANCE: 55.0
+  DEBUG_RGB_FRAMES: [3:20]
+  DEBUG_RGB_DIR: "rgb_debug"
+  DEBUG_RGB_ZOOM_SIZE: 80
+  DEBUG_RGB_CONTACT_COLS: 6
+
+  USE_CANDIDATE_FAMILY: false
+  OFF_THRESHOLD_MAX: 80
+  OFF_THRESHOLD_SUM: 120
+  DEBUG_REGION_FRAMES: [3:20]
+  DEBUG_REGION_DIR: "region_debug"
+
+  OFF_THRESHOLD_MAX: 80
+  OFF_THRESHOLD_SUM: 120
+  OFF_BASELINE_DISTANCE: 45.0
+  DEBUG_REGION_FRAMES: [50,51,52,53]
+  DEBUG_REGION_DIR: "region_debug"
+  
+  
+  DEBUG_RGB: true
+  DEBUG_RGB_DIR: "rgb_id_debug"
+
+  # If empty, save every DEBUG_RGB_EVERY_N-th frame.
+  DEBUG_RGB_FRAMES: []
+  DEBUG_RGB_EVERY_N: 1
+
+  DEBUG_RGB_ZOOM_SIZE: 96
+  DEBUG_RGB_CONTACT_COLS: 6
+  DEBUG_RGB_GIF: "leds.gif"
+  DEBUG_RGB_GIF_DURATION: 0.12
+  
+  
+  REFS:
+    base:
+      0: {R: 118.0, G:  22.0, B:  15.0}
+      1: {R: 158.0, G:  45.0, B:  14.0}
+      2: {R: 190.0, G:  68.0, B:  14.0}
+      3: {R: 223.0, G: 118.0, B:  16.0}
+
+      4: {R:  15.0, G: 147.0, B:  16.0}
+      5: {R:  23.0, G: 198.0, B:  22.0}
+      6: {R:  39.0, G: 232.0, B:  28.0}
+
+      7: {R:   6.0, G:  34.0, B: 110.0}
+      8: {R:   8.0, G:  52.0, B: 142.0}
+      9: {R:  185.0, G: 232.0, B: 70.0}
+
+    light:
+      0: {R: 168.0, G:  22.0, B:  10.0}
+      1: {R: 190.0, G:  18.0, B:  10.0}
+      2: {R: 214.0, G:  15.0, B:  10.0}
+      3: {R: 233.0, G: 115.0, B:  13.0}
+
+      4: {R:  18.0, G: 142.0, B:  17.0}
+      5: {R:  20.0, G: 190.0, B:  20.0}
+      6: {R:  28.0, G: 228.0, B:  28.0}
+
+      7: {R:  28.0, G:  33.0, B:  85.0}
+      8: {R:  28.0, G:  50.0, B: 110.0}
+      9: {R:  215.0, G: 245.0, B: 70.0}
+
+# === PHOTOTAXIS ENVIRONMENT === #
+PHOTOTAXIS_ANALYSIS: True   # If True, use dark/light split processing and Hough circles for phototaxis experiments.
+PHOTOTAXIS_FAST: True   # If True, use cached masks/background and ROI-based Hough after the first successful frame.
+PHOTOTAXIS_ROI_HALF_SIZE: 80   # Half-size of square ROI around each previous robot center.
+PHOTOTAXIS_FULL_DETECT_EVERY: 0   # If > 0, force one full-frame phototaxis detection every N frames.
+PHOTOTAXIS_LIGHT_CC_USE_ROIS: True
+PHOTOTAXIS_LIGHT_CC_ROI_HALF_SIZE: 50
+
+DIVIDING_LINE:
+  X1: 0
+  Y1: 1405
+  X2: 2973
+  Y2: 1560
+  DARK_REF_X: 1400
+  DARK_REF_Y: 2200
+  LIGHT_SIDE: positive
+  COORDS: processed
+
+PHOTOTAXIS_THRESHOLDS:
+  DARK_THRESHOLD: 41 #41
+  LIGHT_THRESHOLD: 20 #30
+
+LIGHT_CONNECTED_COMPONENTS:
+  ENABLED: true
+  MIN_AREA: 45
+  CONNECTIVITY: 8
+
+HOUGH_CIRCLES:
+  ENABLED: true
+  DP: 1.0
+  MIN_DIST: 70.0
+  PARAM1: 10.0
+  PARAM2: 14.0
+  MIN_RADIUS: 40
+  MAX_RADIUS: 60
+  FALLBACK_PARAM2: 12.0
+  FALLBACK_MIN_DIST: 65.0
+  FALLBACK_MIN_RADIUS: 38
+  FALLBACK_MAX_RADIUS: 62
 
 # === PLOTTING PARAMETERS ===
 PLOTTING:

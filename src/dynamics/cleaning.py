@@ -1,6 +1,6 @@
 """
 Utility modules containing functions mainly related to
-cleaning pogobot datasets already generated.
+cleaning pogobot .csv datasets already generated.
 """
 
 import pandas as pd

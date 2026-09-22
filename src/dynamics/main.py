@@ -86,7 +86,7 @@ def main():
             as a function of the pwm in results/dynamics/plot/pog_id 
             folder.
         
-        *7) --mode complete
+        *7) --mode complete*
             launch each dynamical processing step sequentially
             from 1 to 6 (not recommended)
     
@@ -121,16 +121,16 @@ def main():
 
     if args.mode == "process":
         processor.process(pogobot = args.pogobot)
-    
+
     if args.mode == "check":
         processor.check(pogobot = args.pogobot)
-    
+
     if args.mode == "clean":
         processor.clean(pogobot = args.pogobot)
-    
+
     if args.mode == "extract":
         processor.extract(pogobot = args.pogobot, plot = args.plot)
-    
+
     if args.mode == "plot":
         processor.plot(pogobot = args.pogobot)
 

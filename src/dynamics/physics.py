@@ -217,24 +217,28 @@ def compute_v_msd(df: pd.DataFrame,
     }
 
 def compute_theta_msd(df: pd.DataFrame,
-                      max_tau_seconds: float = 2.0):
+                      max_tau_seconds: float = 2.0,
+                      taus_percentage: float = 0.3):
     """
     Compute mean squared displacement (MSD) of the theta angle,
     properly unwrapping angular discontinuities.
 
     Parameters
     ----------
-    df : pd.DataFrame
-        Dataframe containing 'time' and 'theta' columns.
-        'theta' must be in degrees in [-180, 180].
-    max_tau_seconds : float, default=2.0
-        Maximum lag time (in seconds) to consider for MSD computation.
-
+        df : pd.DataFrame
+            Dataframe containing 'time' and 'theta' columns.
+            'theta' must be in degrees in [-180, 180].
+        max_tau_seconds : float, default=2.0
+            Maximum lag time (in seconds) to consider for MSD computation.
+        taus_percentage (float):
+                Fraction of the smallest lag times used for the 
+                linear fit. Default is 0.3.
     Returns
     -------
-    dict
-        - "theta_msd": np.ndarray, MSD of theta angle (rad^2).
-        - "taus_sec_squared": np.ndarray, tau^2 values (s^2).
+        dict
+        - omega_msd (float): estimated pogobot angular velocity in rad/s
+        - theta_msd: np.ndarray, MSD of theta angle (rad^2).
+        - taus_sec_squared: np.ndarray, tau^2 values (s^2).
     """
     theta_rad = np.deg2rad(df['theta'].values)
     time = df['time'].values
@@ -254,9 +258,23 @@ def compute_theta_msd(df: pd.DataFrame,
     taus_sec_squared = taus_sec**2
     theta_msd = np.array(theta_msd)
 
+    fit_range = int(taus_percentage * len(taus))
+    x_fit = taus_sec_squared[:fit_range].reshape(-1, 1)
+    y_fit = theta_msd[:fit_range]
+
+    reg = LinearRegression().fit(x_fit, y_fit)
+    slope = reg.coef_[0]
+
+    if slope < 0:
+        print(f"Negative slope encountered (omega_msd invalid), setting to 0")
+        omega_msd = 0
+    else:
+        omega_msd = np.sqrt(slope)
+
     return {
+        "omega_msd": omega_msd,
         "theta_msd": theta_msd,              # in rad^2
-        "taus_sec_squared": taus_sec_squared # in s^2
+        "taus_theta_sec_squared": taus_sec_squared # in s^2
     }
 
 

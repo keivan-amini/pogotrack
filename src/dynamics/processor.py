@@ -12,6 +12,7 @@ the whole video and obtain different dataset for each run.
 ## at the moment focusing on a situation where just one pogobot is in the arena
 
 import os
+import json
 import yaml
 import ffmpeg
 import pandas as pd
@@ -29,6 +30,7 @@ from .physics import (
     compute_v_msd,
     compute_radius,
     compute_omega_ucm,
+    compute_theta_msd, #TODO
 )
 
 from .plotting import (
@@ -367,7 +369,7 @@ class DynamicsProcessor:
         Physical variables
         ------------------
             1) omega_fft   : angular velocity from FFT of theta.
-            2) omega_noise : angular velocity from mean dθ/dt.
+            2) omega_noise : angular velocity from mean $d\theta/dt$.
             3) v_msd       : linear velocity from MSD slope.
             4) R           : radius of curvature from circle fit.
             5) omega_ucm   : angular velocity assuming uniform circular motion.
@@ -398,6 +400,8 @@ class DynamicsProcessor:
         results = []
         all_trials_per_pwm = {}
         all_circles_per_pwm = {}
+        msd_results = []
+        msd_theta_results = []
 
         for pwm in self.tested_pwm:
             trials_data = []  # collect MSD data for this pwm
@@ -434,6 +438,9 @@ class DynamicsProcessor:
 
                     omega_ucm = compute_omega_ucm(v_msd, R)
 
+                    trial_theta_data = compute_theta_msd(df, self.max_tau_seconds, self.taus_percentage)
+                    omega_msd = trial_theta_data["omega_msd"]
+
                     results.append({
                         "pwm": pwm,
                         "trial": trial,
@@ -441,12 +448,30 @@ class DynamicsProcessor:
                         "omega_noise": omega_noise,
                         "v_msd": v_msd,
                         "R": R,
-                        "omega_ucm": omega_ucm
+                        "omega_ucm": omega_ucm,
+                        "omega_msd": omega_msd
                     })
 
                     # Store MSD data for overlay plotting
                     trials_data.append(trial_data)
                     circle_trials_data.append(circle_trial_data)
+
+                    msd_results.append({
+                    "pogobot": pogobot,
+                    "pwm": pwm,
+                    "trial": trial,
+                    "taus_sec_squared": json.dumps(trial_data["taus_sec_squared"].tolist()),
+                    "msd": json.dumps(trial_data["msd"].tolist()),
+                    "v_msd": v_msd})
+
+
+                    msd_theta_results.append({
+                    "pogobot": pogobot,
+                    "pwm": pwm,
+                    "trial": trial,
+                    "taus_theta_sec_squared": json.dumps(trial_theta_data["taus_theta_sec_squared"].tolist()),
+                    "theta_msd": json.dumps(trial_theta_data["theta_msd"].tolist()),
+                    })
 
                 except Exception as e:
                     print(f"⚠️ Skipping {pogobot} pwm={pwm} trial={trial} due to error: {e}")
@@ -476,6 +501,16 @@ class DynamicsProcessor:
             save_path = os.path.join(results_dir, f"{pogobot}_physics.csv")
             df_results.to_csv(save_path, index=False)
             print(f"✅ Saved physics results for {pogobot} to {save_path}")
+
+            # Save detailed MSD data
+            df_msd = pd.DataFrame(msd_results)
+            msd_path = os.path.join(results_dir, f"{pogobot}_msd_trials.csv")
+            df_msd.to_csv(msd_path, index=False)
+
+            df_msd_theta = pd.DataFrame(msd_theta_results)
+            msd_theta_path = os.path.join(results_dir, f"{pogobot}_msd_theta_trials.csv")
+            df_msd_theta.to_csv(msd_theta_path, index=False)
+
         else:
             print(f"⚠️ No results extracted for {pogobot}")
 

@@ -58,13 +58,17 @@ def main():
         os.makedirs(out_dir, exist_ok=True)
 
     vp = VideoProcessor(
-        video_path = args.video,
-        background_path = args.background,
-        save_path = args.output,
-        config_path = args.config,
-        frame_visualize = args.visualize
+        video_path=args.video,
+        background_path=args.background,
+        save_path=args.output,
+        config_path=args.config,
+        frame_visualize=args.visualize,
     )
-    vp.process()
+
+    if bool(vp.config.get("RGB_ID_ANALYSIS", False)):
+        vp.process_rgb_id()
+    else:
+        vp.process()
 
 if __name__ == "__main__":
     main()
