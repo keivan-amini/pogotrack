@@ -19,6 +19,10 @@ Modes
     Run standard tracking and RGB-ID tracking only. The two tracking outputs
     are written to each experiment's results directory together with logs.
 
+``rgb``
+    Run RGB-ID tracking only. This is useful when the standard tracking CSVs
+    already exist and only ``RGB_ID.csv`` needs to be regenerated.
+
 ``merge``
     Use the standard CSV, RGB-ID CSV, and probe Feather file to create the
     merged dataset. Automatic ``seconds_difference`` and RGB start-frame
@@ -34,6 +38,7 @@ Examples
 
     # Run only one stage.
     python postprocessing/run_pipeline.py --stage batch
+    python postprocessing/run_pipeline.py --stage rgb
     python postprocessing/run_pipeline.py --stage merge
     python postprocessing/run_pipeline.py --stage slides
 
@@ -46,7 +51,9 @@ Examples
 
 No Python multiprocessing is used inside this orchestration script; batch
 parallelism comes from independent tracking subprocesses controlled by
-``batch.max_workers``.
+``batch.max_workers``. During concurrent tracking, each subprocess receives a
+stable tqdm terminal position and its output is also written to the
+experiment-specific log file.
 """
 
 from __future__ import annotations
@@ -57,6 +64,7 @@ import shlex
 import subprocess
 import sys
 import tempfile
+import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from pathlib import Path
@@ -98,6 +106,9 @@ SLIDE_BOOLEAN_FLAGS = {
     "no_tex": "--no-tex",
     "show": "--show",
 }
+
+
+_TERMINAL_OUTPUT_LOCK = threading.Lock()
 
 
 @dataclass(frozen=True)
@@ -257,25 +268,70 @@ def run_command(
     project_root: Path,
     log_path: Path | None = None,
     dry_run: bool = False,
+    progress_position: int | None = None,
+    progress_desc: str | None = None,
 ) -> None:
-    print(f"$ {command_text(command)}")
+    print(f"$ {command_text(command)}", flush=True)
     if dry_run:
         return
 
-    if log_path is None:
-        subprocess.run(command, cwd=project_root, check=True)
-        return
+    environment = os.environ.copy()
+    # Keep progress bars and ordinary print() calls visible immediately when
+    # the child process writes to the pipe used by the live log tee below.
+    environment["PYTHONUNBUFFERED"] = "1"
+    if progress_position is not None:
+        # The child owns the tqdm instance. Give every concurrently running
+        # experiment a stable terminal row and let the bars disappear cleanly
+        # when that command finishes.
+        environment["POGOTRACK_TQDM_POSITION"] = str(progress_position)
+        environment["POGOTRACK_TQDM_LEAVE"] = "0"
+        if progress_desc:
+            environment["POGOTRACK_TQDM_DESC"] = progress_desc
 
-    log_path.parent.mkdir(parents=True, exist_ok=True)
-    with log_path.open("w", encoding="utf-8") as log:
-        log.write(f"$ {command_text(command)}\n\n")
+    if log_path is None:
         subprocess.run(
             command,
             cwd=project_root,
-            stdout=log,
-            stderr=subprocess.STDOUT,
             check=True,
+            env=environment,
         )
+        return
+
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    with log_path.open("wb") as log:
+        log.write(f"$ {command_text(command)}\n\n".encode("utf-8"))
+        process = subprocess.Popen(
+            command,
+            cwd=project_root,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            env=environment,
+            bufsize=0,
+        )
+        assert process.stdout is not None
+        try:
+            while True:
+                chunk = os.read(process.stdout.fileno(), 8192)
+                if not chunk:
+                    break
+                log.write(chunk)
+                log.flush()
+                # A lock prevents two concurrently running experiments from
+                # interleaving bytes in the terminal. The logs remain separate.
+                with _TERMINAL_OUTPUT_LOCK:
+                    terminal = getattr(sys.stdout, "buffer", sys.stdout)
+                    terminal.write(chunk)
+                    terminal.flush()
+        except KeyboardInterrupt:
+            process.terminate()
+            process.wait()
+            raise
+        finally:
+            process.stdout.close()
+
+        return_code = process.wait()
+        if return_code:
+            raise subprocess.CalledProcessError(return_code, command)
 
 
 def write_tracking_config(
@@ -308,13 +364,18 @@ def write_tracking_config(
     return path
 
 
-def run_tracking(
+def run_tracking_mode(
     project_root: Path,
     python: Path,
     config: dict[str, Any],
     experiment: Experiment,
     *,
+    rgb_enabled: bool,
+    video_key: str,
+    output_key: str,
+    log_name: str,
     dry_run: bool,
+    progress_position: int | None = None,
 ) -> None:
     paths = get_paths(project_root, config, experiment)
     check_inputs(paths, experiment)
@@ -329,32 +390,97 @@ def run_tracking(
                 paths["tracking_config"],
                 paths["output_dir"],
                 experiment.n_robots,
-                False,
+                rgb_enabled,
             )
             tracking_config = temporary_config
 
-        normal_command = [
+        command = [
             str(python),
             "-m",
             "main",
             "--video",
-            str(paths["normal_video"]),
+            str(paths[video_key]),
             "--background",
             str(paths["background"]),
             "--output",
-            str(paths["normal_output"]),
+            str(paths[output_key]),
             "--config",
             str(tracking_config),
         ]
         run_command(
-            normal_command,
+            command,
             project_root=project_root,
-            log_path=paths["output_dir"] / "tracking.log",
+            log_path=paths["output_dir"] / log_name,
             dry_run=dry_run,
+            progress_position=progress_position,
+            progress_desc=(
+                f"{experiment.identifier}: "
+                f"{'RGB-ID tracking' if rgb_enabled else 'tracking'}"
+            ),
         )
     finally:
         if temporary_config is not None:
             temporary_config.unlink(missing_ok=True)
+
+
+def run_tracking(
+    project_root: Path,
+    python: Path,
+    config: dict[str, Any],
+    experiment: Experiment,
+    *,
+    dry_run: bool,
+    progress_position: int | None = None,
+) -> None:
+    """Run normal tracking, followed by RGB-ID tracking."""
+    run_tracking_mode(
+        project_root,
+        python,
+        config,
+        experiment,
+        rgb_enabled=False,
+        video_key="normal_video",
+        output_key="normal_output",
+        log_name="tracking.log",
+        dry_run=dry_run,
+        progress_position=progress_position,
+    )
+    run_tracking_mode(
+        project_root,
+        python,
+        config,
+        experiment,
+        rgb_enabled=True,
+        video_key="rgb_video",
+        output_key="rgb_output",
+        log_name="rgb_tracking.log",
+        dry_run=dry_run,
+        progress_position=progress_position,
+    )
+
+
+def run_rgb_tracking(
+    project_root: Path,
+    python: Path,
+    config: dict[str, Any],
+    experiment: Experiment,
+    *,
+    dry_run: bool,
+    progress_position: int | None = None,
+) -> None:
+    """Run RGB-ID tracking without recomputing the normal tracking CSV."""
+    run_tracking_mode(
+        project_root,
+        python,
+        config,
+        experiment,
+        rgb_enabled=True,
+        video_key="rgb_video",
+        output_key="rgb_output",
+        log_name="rgb_tracking.log",
+        dry_run=dry_run,
+        progress_position=progress_position,
+    )
 
 
 def load_motion_data(path: Path, analysis_seconds: float) -> pd.DataFrame:
@@ -497,43 +623,6 @@ def detect_motion_start(
         "Set merge.seconds_difference manually or adjust merge.auto settings."
     )
 
-    temporary_config = None
-    try:
-        if dry_run:
-            tracking_config = paths["tracking_config"]
-        else:
-            temporary_config = write_tracking_config(
-                paths["tracking_config"],
-                paths["output_dir"],
-                experiment.n_robots,
-                True,
-            )
-            tracking_config = temporary_config
-
-        rgb_command = [
-            str(python),
-            "-m",
-            "main",
-            "--video",
-            str(paths["rgb_video"]),
-            "--background",
-            str(paths["background"]),
-            "--output",
-            str(paths["rgb_output"]),
-            "--config",
-            str(tracking_config),
-        ]
-        run_command(
-            rgb_command,
-            project_root=project_root,
-            log_path=paths["output_dir"] / "rgb_tracking.log",
-            dry_run=dry_run,
-        )
-    finally:
-        if temporary_config is not None:
-            temporary_config.unlink(missing_ok=True)
-
-
 def run_merge(
     project_root: Path,
     python: Path,
@@ -541,6 +630,7 @@ def run_merge(
     experiment: Experiment,
     *,
     dry_run: bool,
+    progress_position: int | None = None,
 ) -> None:
     paths = get_paths(project_root, config, experiment)
     check_inputs(paths, experiment)
@@ -612,6 +702,7 @@ def run_slides(
     experiment: Experiment,
     *,
     dry_run: bool,
+    progress_position: int | None = None,
 ) -> None:
     paths = get_paths(project_root, config, experiment)
     if not paths["merged_output"].is_file() and not dry_run:
@@ -632,6 +723,8 @@ def run_slides(
         str(paths["normal_video"]),
         "--controller",
         controller,
+        "--experiment-id",
+        experiment.identifier,
         "--output",
         str(paths["slides_output"]),
     ]
@@ -670,6 +763,8 @@ def run_stage(
 ) -> None:
     if stage == "batch":
         function = run_tracking
+    elif stage == "rgb":
+        function = run_rgb_tracking
     elif stage == "merge":
         function = run_merge
     elif stage == "slides":
@@ -680,14 +775,29 @@ def run_stage(
     if dry_run or max_workers <= 1 or len(experiments) <= 1:
         for experiment in experiments:
             print(f"\n[{stage}] {experiment.identifier}")
-            function(project_root, python, config, experiment, dry_run=dry_run)
+            function(
+                project_root,
+                python,
+                config,
+                experiment,
+                dry_run=dry_run,
+                progress_position=0,
+            )
         return
 
     failures = []
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         futures = {
-            executor.submit(function, project_root, python, config, experiment, dry_run=False): experiment
-            for experiment in experiments
+            executor.submit(
+                function,
+                project_root,
+                python,
+                config,
+                experiment,
+                dry_run=False,
+                progress_position=index,
+            ): experiment
+            for index, experiment in enumerate(experiments)
         }
         for future in as_completed(futures):
             experiment = futures[future]
@@ -714,7 +824,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--stage",
-        choices=["all", "batch", "merge", "slides"],
+        choices=["all", "batch", "rgb", "merge", "slides"],
         default="all",
         help="Run one stage or all stages in order",
     )
@@ -760,7 +870,7 @@ def main() -> None:
             python,
             config,
             experiments,
-            max_workers=max_workers if stage == "batch" else 1,
+            max_workers=max_workers if stage in {"batch", "rgb"} else 1,
             dry_run=args.dry_run,
         )
 

@@ -62,11 +62,12 @@ def visualize_contours(frame, contours, x, y, thetas, cfg):
 
     # Draw centroids + arrows
     for x0, y0, theta in zip(x, y, thetas):
-        x1 = int(x0 + arrow_length_frame * np.cos(np.deg2rad(theta)))
-        y1 = int(y0 + arrow_length_frame * np.sin(np.deg2rad(theta)))
         cv2.circle(frame_disp, (x0, y0), centroids_size, (0, 255, 0), -1)
-        cv2.arrowedLine(frame_disp, (x0, y0), (x1, y1),
-                        (0, 255, 0), 2, tipLength=tip_length)
+        if np.isfinite(theta):
+            x1 = int(x0 + arrow_length_frame * np.cos(np.deg2rad(theta)))
+            y1 = int(y0 + arrow_length_frame * np.sin(np.deg2rad(theta)))
+            cv2.arrowedLine(frame_disp, (x0, y0), (x1, y1),
+                            (0, 255, 0), 2, tipLength=tip_length)
 
     # Subplot grid
     n = len(thetas)

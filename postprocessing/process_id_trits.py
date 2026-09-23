@@ -719,7 +719,11 @@ def merge_datasets(
     dyn["y"] = pd.to_numeric(dyn["y"], errors="coerce")
     dyn["theta"] = pd.to_numeric(dyn["theta"], errors="coerce")
     dyn["particle"] = pd.to_numeric(dyn["particle"], errors="coerce")
-    dyn = dyn.dropna(subset=["time", "x", "y", "theta", "particle"]).copy()
+    # An orientation can be unavailable even when the detected centre is
+    # valid (for example, when the orientation patch contains no thresholded
+    # pixels). Keep the x,y trajectory and preserve that theta as NaN.
+    dyn.loc[~np.isfinite(dyn["theta"]), "theta"] = np.nan
+    dyn = dyn.dropna(subset=["time", "x", "y", "particle"]).copy()
     dyn["particle"] = dyn["particle"].astype(int)
 
     dyn["t"] = dyn["time"].astype(float) - float(delay_s)

@@ -11,6 +11,7 @@ containing all the video processing parameters. Note: these
 default parameters are overwritten by config/default.yaml.
 """
 
+import os
 import time
 import cv2
 cv2.setNumThreads(1)
@@ -57,6 +58,50 @@ from src.plot_helpers import (
 def _progress_log(message):
     """Write a message without disturbing active tqdm progress bars."""
     tqdm.write(str(message))
+
+
+def _tqdm_position(default=0):
+    value = os.environ.get("POGOTRACK_TQDM_POSITION")
+    if value is None:
+        return default
+    try:
+        return max(0, int(value))
+    except ValueError:
+        return default
+
+
+def _tqdm_leave(default=True):
+    value = os.environ.get("POGOTRACK_TQDM_LEAVE")
+    if value is None:
+        return default
+    return value.strip().lower() not in {"0", "false", "no"}
+
+
+def _tqdm_description(default):
+    return os.environ.get("POGOTRACK_TQDM_DESC") or default
+
+
+def _has_complete_positions(x, y, expected):
+    if x is None or y is None:
+        return False
+    if len(x) != expected or len(y) != expected:
+        return False
+    return bool(np.isfinite(np.asarray(x, dtype=float)).all() and np.isfinite(np.asarray(y, dtype=float)).all())
+
+
+def _has_complete_angles(thetas, expected):
+    if thetas is None or len(thetas) != expected:
+        return False
+    return bool(np.isfinite(np.asarray(thetas, dtype=float)).all())
+
+
+def _angles_for_positions(thetas, expected):
+    """Return one theta slot per valid position, padding unknown angles with NaN."""
+    aligned = np.full(expected, np.nan, dtype=float)
+    if thetas is not None:
+        values = np.asarray(thetas, dtype=float).reshape(-1)
+        aligned[: min(expected, len(values))] = values[:expected]
+    return aligned
 
 
 def _process_video_chunk_worker(job):
@@ -492,7 +537,7 @@ class VideoProcessor:
                 "diff": diff,
                 "dark_bin": None,
                 "light_bin": None,
-                "success": len(thetas) == self.N_POGO,
+                "success": _has_complete_positions(x, y, self.N_POGO),
             }
 
             if result["success"]:
@@ -516,7 +561,7 @@ class VideoProcessor:
             "diff": diff,
             "dark_bin": None,
             "light_bin": None,
-            "success": len(thetas) == self.N_POGO,
+            "success": _has_complete_positions(x, y, self.N_POGO),
         }
 
         if result["success"]:
@@ -632,7 +677,7 @@ class VideoProcessor:
                     "diff": candidate_phot["out"],
                     "dark_bin": candidate_phot["dark_bin"],
                     "light_bin": candidate_phot["light_bin"],
-                    "success": len(merged_circles) == self.N_POGO and len(thetas) == self.N_POGO,
+                    "success": len(merged_circles) == self.N_POGO and _has_complete_positions(x, y, self.N_POGO),
                 }
                 if result["success"]:
                     _progress_log(f"Success with local phototaxis thresholds dark={dark_t}, light={light_t}.")
@@ -682,7 +727,7 @@ class VideoProcessor:
                 "diff": candidate_phot["out"],
                 "dark_bin": candidate_phot["dark_bin"],
                 "light_bin": candidate_phot["light_bin"],
-                "success": len(circles) == self.N_POGO and len(thetas) == self.N_POGO,
+                "success": len(circles) == self.N_POGO and _has_complete_positions(x, y, self.N_POGO),
             }
 
             if result["success"]:
@@ -1060,9 +1105,8 @@ class VideoProcessor:
 
             ok = (
                 len(circles) == self.N_POGO
-                and len(x) == self.N_POGO
-                and len(y) == self.N_POGO
-                and len(thetas) == self.N_POGO
+                and _has_complete_positions(x, y, self.N_POGO)
+                and _has_complete_angles(thetas, self.N_POGO)
             )
         else:
             frame_blue = to_blue_channel(frame_raw)
@@ -1082,7 +1126,10 @@ class VideoProcessor:
             x, y = get_position(contours)
             thetas = get_all_angles(thresh, y, x)
 
-            ok = x is not None and len(x) == self.N_POGO and len(thetas) == self.N_POGO
+            ok = (
+                _has_complete_positions(x, y, self.N_POGO)
+                and _has_complete_angles(thetas, self.N_POGO)
+            )
 
             if not ok:
                 result = self._adjust_detection(diff=diff, mode="classic")
@@ -1090,7 +1137,10 @@ class VideoProcessor:
                 y = result["y"]
                 thetas = result["thetas"]
 
-                ok = x is not None and len(x) == self.N_POGO and len(thetas) == self.N_POGO
+                ok = (
+                    _has_complete_positions(x, y, self.N_POGO)
+                    and _has_complete_angles(thetas, self.N_POGO)
+                )
 
         if not ok:
             raise RuntimeError(
@@ -1153,7 +1203,13 @@ class VideoProcessor:
         n = 0
 
         try:
-            with tqdm(total=total_frames, desc="Processing RGB-ID video", unit="frame") as pbar:
+            with tqdm(
+                total=total_frames,
+                desc=_tqdm_description("Processing RGB-ID video"),
+                unit="frame",
+                position=_tqdm_position(),
+                leave=_tqdm_leave(),
+            ) as pbar:
                 while self.video.isOpened():
                     ret, frame = self.video.read()
                     if not ret:
@@ -1320,13 +1376,17 @@ class VideoProcessor:
             background_blue = to_blue_channel(self.background)
             background_masked = cv2.bitwise_and(background_blue, background_blue, mask=mask)
 
+        invalid_theta_rows = 0
+        progress_position = _tqdm_position(progress_position)
+        progress_desc = _tqdm_description(progress_desc or "Processing video")
+
         with tqdm(
             total=frame_end - frame_start,
-            desc=progress_desc or "Processing video",
+            desc=progress_desc,
             unit="frame",
             disable=not show_progress,
             position=progress_position,
-            leave=True,
+            leave=_tqdm_leave(),
         ) as pbar:
             while self.video.isOpened() and n < frame_end:
 
@@ -1356,7 +1416,10 @@ class VideoProcessor:
                     circles, x, y, thetas = self._detect_phototaxis_bots(thresh, frame_idx=n)
                     self._add_timing("phot_detect_total", t_detect)
 
-                    detected_ok = (len(circles) == self.N_POGO and len(thetas) == self.N_POGO)
+                    detected_ok = (
+                        len(circles) == self.N_POGO
+                        and _has_complete_positions(x, y, self.N_POGO)
+                    )
                     #xif n == 0:
                         #debug_frame( #to remove
                             #frame,
@@ -1377,7 +1440,7 @@ class VideoProcessor:
                     contours = find_contours(thresh, area_params=self.AREAS, peri_params=self.PERIMETERS)
                     x, y = get_position(contours)
                     thetas = get_all_angles(thresh, y, x)
-                    detected_ok = (len(thetas) == self.N_POGO)
+                    detected_ok = _has_complete_positions(x, y, self.N_POGO)
 
                 if not detected_ok:
                     _progress_log(f"Frame {n}: detection mismatch. Attempting fallback...")
@@ -1459,6 +1522,9 @@ class VideoProcessor:
                 if self.PHOTOTAXIS_ANALYSIS:
                     self._update_phototaxis_state(x, y)  
 
+                thetas = _angles_for_positions(thetas, len(x))
+                theta_array = np.asarray(thetas, dtype=float)
+                invalid_theta_rows += int(np.count_nonzero(~np.isfinite(theta_array)))
                 self._append_data_rows(n, x, y, thetas)
                 self._add_timing("frame_total", t_frame)
                 self._timings_count += 1
@@ -1468,6 +1534,12 @@ class VideoProcessor:
                     pbar.update(1)
 
         self.video.release()
+
+        if invalid_theta_rows:
+            _progress_log(
+                f"Warning: {invalid_theta_rows} detections had no finite theta; "
+                "their valid x,y positions were retained."
+            )
 
         self.df = pd.DataFrame(
             self._data_rows,

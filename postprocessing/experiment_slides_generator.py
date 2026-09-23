@@ -37,6 +37,7 @@ most used one:
 from __future__ import annotations
 
 import argparse
+import re
 import shutil
 from pathlib import Path
 
@@ -429,22 +430,61 @@ def build_controller_title(controller: str) -> str:
     return rf"Initial {controller} controllers $w_i(t_0)$"
 
 
-def build_default_suptitle(controller: str, params: dict, robust_max_runtime: float) -> str:
+def parse_experiment_metadata(experiment_id: str | None) -> dict[str, object]:
+    """Extract title metadata from IDs such as ``alpha10-3_T1000_v2``."""
+    if not experiment_id:
+        return {}
+
+    match = re.search(
+        r"alpha(?P<alpha_base>\d+)-(?P<alpha_power>\d+)_T(?P<tq>\d+)"
+        r"(?:_v(?P<version>\d+))?",
+        Path(str(experiment_id)).stem,
+    )
+    if match is None:
+        return {}
+
+    # Experiment IDs use the convention ``alpha10-3`` == 10**(-3).
+    # The ``10`` before the hyphen is part of that convention, not a
+    # multiplicative coefficient.
+    alpha_c = 10 ** (-int(match.group("alpha_power")))
+    return {
+        "t_q": int(match.group("tq")),
+        "alpha_c": alpha_c,
+        "version": match.group("version"),
+    }
+
+
+def build_default_suptitle(
+    controller: str,
+    params: dict,
+    robust_max_runtime: float,
+    experiment_id: str | None = None,
+) -> str:
+    metadata = parse_experiment_metadata(experiment_id)
+    t_q = metadata.get("t_q", robust_max_runtime)
+    alpha_c = metadata.get("alpha_c")
+    version = metadata.get("version")
+    version_suffix = f", v{version}" if version is not None else ""
+    alpha_c_text = f"{alpha_c:g}" if alpha_c is not None else None
+
     if controller == "step":
-        return rf"Phototaxis step controller: $T_q = {robust_max_runtime:g}$, $ \alpha_c = 0.001 $, $D_M = 0$, $\tau_R = {params['policy_run_time_plot']:g}$,  exchange: 'pure genetic drift'"
+        alpha_text = alpha_c_text or "0.001"
+        return rf"Phototaxis step controller: $T_q = {t_q:g}$, $ \alpha_c = {alpha_text} $, $D_M = 0$, $\tau_R = {params['policy_run_time_plot']:g}$, exchange: 'pure genetic drift'{version_suffix}"
     if controller == "gaussian":
+        alpha_text = alpha_c_text or "0.01"
         return (
-            rf"Phototaxis gaussian controller: $T_q = {robust_max_runtime:g}$, "
-            rf"$ \alpha_c = 0.01, $"
+            rf"Phototaxis gaussian controller: $T_q = {t_q:g}$, "
+            rf"$ \alpha_c = {alpha_text}, $"
             rf"$ D_M = 0,$ "
             rf"$\sigma = {params['sigma_policy']:g}$, "
             rf"$\tau_{{R,0}} = {params['tau_r_0_plot']:g}$, "
-            rf" exchange: 'pure teaching'"
+            rf" exchange: 'pure teaching'{version_suffix}"
         )
+    alpha_text = alpha_c_text or "0.0001"
     return (
-        rf"Phototaxis tanh controller: $T_q = 100$, "
-        rf"$\delta = {params['delta']:g}$, $\alpha_C = 0.0001$, "
-        rf"$\tau_{{R,max}} = {params['tau_r_max_plot']:g}$, v2"
+        rf"Phototaxis tanh controller: $T_q = {t_q:g}$, "
+        rf"$\delta = {params['delta']:g}$, $\alpha_C = {alpha_text}$, "
+        rf"$\tau_{{R,max}} = {params['tau_r_max_plot']:g}${version_suffix}"
     )
 
 
@@ -646,6 +686,12 @@ def build_parser():
     p.add_argument("--delta", type=float, default=None, help="Optional override for tanh delta")
 
     p.add_argument("--suptitle", type=str, default=None, help="Optional custom figure title")
+    p.add_argument(
+        "--experiment-id",
+        type=str,
+        default=None,
+        help="Experiment identifier used to derive T_q, alpha_c, and version in the title",
+    )
     p.add_argument("--no-tex", action="store_true")
     p.add_argument("--show", action="store_true")
     return p
@@ -753,7 +799,12 @@ def main():
     add_panel_tag(ax_wmap, "(i)")
     add_panel_tag(ax_qmap, "(j)")
 
-    suptitle = args.suptitle if args.suptitle else build_default_suptitle(args.controller, params, args.robust_max_runtime)
+    suptitle = args.suptitle if args.suptitle else build_default_suptitle(
+        args.controller,
+        params,
+        args.robust_max_runtime,
+        experiment_id=args.experiment_id or args.video.stem,
+    )
     fig.suptitle(suptitle, y=0.985, fontsize=18)
     fig.subplots_adjust(left=0.06, right=0.985, top=0.94, bottom=0.06)
 
