@@ -17,6 +17,9 @@ experiments:
     date: 24-09-26
     video: alpha10-4_T1000.mp4
     n_robots: 64
+    # Number of workers used to process this experiment's dynamics video.
+    # RGB-ID tracking remains single-worker.
+    workers: 2
 
     # The defaults are id.feather, bkg.bmp, and id_<video>.mp4.
     # Set these explicitly only when an experiment uses different names.

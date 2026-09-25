@@ -142,7 +142,8 @@
   arc=2mm,
   left=5mm,right=5mm,top=4mm,bottom=4mm
 ]
-\textbf{Purpose.} This document describes the analysis procedure used for Pogobot swarm experiments. It starts from the data folder produced during an experiment and covers detection, tracking, RGB identification, merging with robot measurements, and the final figures.
+\raggedright
+\textbf{Purpose.} This document explains how to use Pogotrack to analyse Pogobot swarm experiments. It is written as a practical guideline rather than as complete library documentation, with step-by-step examples that should make the analysis reproducible for the whole team.
 
 \medskip
 \textbf{Maintainer.} Keivan Amini \hfill \textbf{Date.} 22 September 2026
@@ -160,35 +161,48 @@
 
 \section{Introduction}
 
-\subsection{Aim and users}
+\subsection{Purpose and scope}
 
-Pogotrack is a simple library used to analyse and reconstruct trajectories from videos of Pogobot swarms. The main output is a time series of robot positions and orientations, with a persistent identifier for each robot. The video data can then be joined with variables recorded by the robots, such as controller score and weight associated with each robot.
-The current maintainer is Keivan Amini, with contributions from the experimental and robotics teams, including Jérémy Fersula. 
-Most changes should be made through the YAML configuration or the postprocessing configuration; editing the detector itself should not be necessary for a standard experiment.
+Pogotrack is a research tool for reconstructing the trajectories of Pogobot swarms from video. It detects the position and orientation of each robot, links detections through time, and exports a tabular dataset that can be combined with the variables recorded by the robots, such as controller scores and weights.
 
-\subsection{What the pipeline provides}
+This document is a practical guide rather than a complete software reference. It is written for a member of the team who has the raw files for an experiment and wants to reproduce the analysis from start to finish. The examples assume that commands are executed from the root of the Pogotrack repository.
+
+The current maintainer is Keivan Amini, with contributions from the experimental and robotics teams, including Jérémy Fersula. Questions, corrections, and improvements are welcome.
+
+\subsection{The analysis pipeline}
+
+Pogotrack supports circular and rectangular arenas. The phototaxis workflow has currently been tested at ESPCI and uses separate processing for the dark and illuminated parts of the arena. Most experiment-specific settings, such as the arena geometry, number of robots, thresholds, and calibration, belong in YAML configuration files. Editing the detector code should not be necessary for a standard experiment.
+
+A complete experiment normally provides the following files:
 
 \begin{itemize}
-  \item Detection of Pogobot contours and estimation of $(x,y,\theta)$.
-  \item Persistent trajectory linking with TrackPy.
-  \item Phototaxis processing with arena masks, separate dark/light detection, cached masks, ROI detection, and fallback recovery.
-  \item RGB-ID recordings in which the robot LEDs encode a ternary identifier.
-  \item Exact-count detection and recovery for experiments with a fixed number of robots.
-  \item Independent subprocess workers for analysing several experiments at the same time.
-  \item Automatic estimates of the video-to-experiment time offset and RGB flashing start frame.
-  \item Merging of video trajectories with Feather controller data.
-  \item Summary figures showing controller response, population traces, density, and space-time fields.
+  \item a dynamics video, for example \texttt{alpha10-4\_T100\_v2.mp4};
+  \item an RGB-ID video, conventionally named by adding \texttt{id\_} before the dynamics-video name;
+  \item \texttt{bkg.bmp}, the background image of the arena;
+  \item a Feather file containing the internal variables recorded by the robots, usually named after the experiment.
 \end{itemize}
 
-\stepimage{0.65}{pipeline.png}{Overview of the Pogotrack analysis pipeline.}
+The workflow has four stages:
+
+\begin{enumerate}
+  \item \textbf{Dynamics tracking.} The dynamics video is converted into one row per robot and frame, containing position, orientation, time, and a temporary TrackPy identity.
+  \item \textbf{RGB-ID tracking.} The RGB-ID video is analysed to measure the red, green, and blue LED intensities for each robot during the flashing sequence.
+  \item \textbf{Decoding and merging.} The RGB measurements are decoded into robot IDs and joined with the dynamics CSV and the controller data from the Feather file.
+  \item \textbf{Summary figures.} The merged dataset is used to produce PNG and PDF summary slides containing controller, trajectory, light-occupancy, and space--time plots.
+\end{enumerate}
+
+The first two stages are independent video-processing jobs. The third stage connects their outputs, and the fourth stage is optional but useful for a quick quality check.
+\vspace{1cm}
+\stepimage{0.50}{logo_green.png}{Pogotrack logo.}
+\stepimage{0.65}{pipeline.png}{Left panel: overview of the Pogotrack dynamics analysis pipeline.}
 
 \section{Installation}
 
 \subsection{System requirements}
 
-Pogotrack supports CPython 3.11--3.13; Python 3.13 is recommended on Apple Silicon macOS. The versions used by the project are listed in \texttt{requirements.txt}. The dynamics workflow also needs the \texttt{ffmpeg} command-line program. The older tmux launcher needs \texttt{tmux} as well.
+Pogotrack supports CPython 3.11--3.13; Python 3.13 is recommended on Apple Silicon macOS. The versions used by the project are listed in \texttt{requirements.txt}. The workflow also needs the \texttt{ffmpeg} command-line program. The optional tmux launcher needs \texttt{tmux} as well.
 
-On a macOS computer using Homebrew, a typical installation is:
+On macOS with Homebrew, a typical installation is:
 
 \begin{codeblock}
 brew install python@3.13 ffmpeg tmux
@@ -200,7 +214,7 @@ python -m pip install -U pip
 python -m pip install -r requirements.txt
 \end{codeblock}
 
-On some Homebrew installations, the \texttt{DYLD\_LIBRARY\_PATH} line is needed because \texttt{ensurepip} selects the system Expat library. After activating the environment, check the interpreter before installing packages:
+On some Homebrew installations, the \texttt{DYLD\_LIBRARY\_PATH} line is needed because \texttt{ensurepip} selects the system Expat library. After activating the environment, check the interpreter before running the pipeline:
 
 \begin{codeblock}
 python --version
@@ -209,7 +223,9 @@ which python
 
 The first command should report Python 3.11 or newer. The second should point inside \texttt{.venv/bin/}.
 
-\warning{Do not run the pipeline with the old system interpreter \texttt{/usr/bin/python3}. Pogotrack now rejects Python versions older than 3.11. Always activate the project virtual environment first.}
+\warning{Pogotrack rejects Python versions older than 3.11. Always activate the project virtual environment first.}
+
+Once the environment is active, all examples in this guide use \texttt{python}. If the environment is not active, replace \texttt{python} with the full path to the project interpreter, for example \texttt{.venv/bin/python}.
 
 \section{Repository and experiment structure}
 
@@ -241,17 +257,19 @@ For one experiment, the recommended input layout is:
 \begin{codeblock}
 data/
 +-- 18-09-26/
-    +-- alpha10-4_T100_v2.mp4          # normal tracking video
+    +-- alpha10-4_T100_v2.mp4          # dynamics video
     +-- id_alpha10-4_T100_v2.mp4       # RGB-ID video
     +-- bkg.bmp                        # background image
     +-- alpha10-4_T100_v2.feather      # robot controller data
 \end{codeblock}
 
-The two videos must belong to the same experiment. By default, the postprocessing configuration expects the RGB video to have \texttt{id\_} added before the normal video name, the background to be called \texttt{bkg.bmp}, and the Feather file to have the experiment name. These names can be changed in \texttt{postprocessing/pipeline.yaml}.
+The two videos must belong to the same experiment. By default, the postprocessing configuration expects the RGB video to have \texttt{id\_} added before the dynamics-video name, the background to be called \texttt{bkg.bmp}, and the Feather file to have the experiment name. These names can be changed in \texttt{postprocessing/pipeline.yaml}.
 
 \important{Keep the files for one experiment in the same date folder. The postprocessing script uses this layout to build paths and to avoid pairing a video with the wrong background or controller data.}
 
-\section{Core analysis}
+\section{Core analysis: one experiment}
+
+This section describes each stage separately. Running the stages manually is useful when checking a new experiment or debugging a configuration. For routine analyses, the config-driven workflow in Section~\ref{sec:config-workflow} is more convenient.
 
 \subsection{Launching standard tracking}
 
@@ -273,9 +291,11 @@ For a phototaxis experiment, the default configuration uses the dark/light arena
 \texttt{time, x, y, theta, particle}
 \end{center}
 
-Here \texttt{particle} is TrackPy's temporary identity. It is not the physical robot ID; that mapping is made later using the RGB-ID recording.
+Here \texttt{particle} is TrackPy's temporary identity. It is not the physical robot ID assigned to the robot in the experiment; that mapping is made later using the RGB-ID recording.
 
 \subsection{Parallel processing of one video}
+
+The dynamics video can be split into contiguous frame ranges and processed by multiple workers. This is different from running several experiments in parallel: here, several processes work on different parts of the same video.
 
 For normal phototaxis tracking, independent frame chunks can be processed by multiple workers:
 
@@ -289,11 +309,31 @@ python -m main \\
   --warmup-frames 50
 \end{codeblock}
 
-The video is split into contiguous frame ranges. Each worker receives context frames before its range so that local detection state can be initialized. The results are put back in frame order before TrackPy linking. This mode is for standard phototaxis tracking only; it cannot be combined with RGB-ID analysis or frame visualization.
+The video is split into contiguous frame ranges. Each worker receives context frames before its assigned range so that the phototaxis ROI detector can initialise its local state. Only the requested range is retained from each worker. The parent process then restores frame order and performs one global TrackPy linking pass, allowing temporary identities to continue across chunk boundaries.
+
+The number of context frames is controlled by \texttt{--warmup-frames}; 50 is a reasonable starting value. Increase it if robots can move a long distance near a chunk boundary. The warm-up frames are processed again by neighbouring workers, so a small amount of redundant work is expected.
+
+Multiprocessing has the following restrictions:
+
+\begin{itemize}
+  \item it is intended for standard dynamics tracking, including phototaxis;
+  \item it cannot be combined with \texttt{RGB\_ID\_ANALYSIS: true};
+  \item it cannot be combined with \texttt{--visualize};
+  \item all workers must write to the same final output only through the parent process; do not start two jobs with the same output path;
+  \item two workers are a sensible first benchmark on a laptop. More workers do not necessarily mean proportionally greater speed, because video decoding, memory bandwidth, and circle detection can become bottlenecks.
+\end{itemize}
+
+After a parallel run, compare its processing time and output with a sequential run on a representative video. In particular, check the number of rows, the number of detected robots per frame, and the continuity of trajectories around chunk boundaries.
 
 \subsection{RGB-ID tracking}
 
-The RGB-ID video is processed with \texttt{RGB\_ID\_ANALYSIS: true}. In normal use, \texttt{run\_pipeline.py} creates a temporary configuration, sets the expected robot count, and launches this step. A direct command looks like this:
+The RGB-ID video is processed with \texttt{RGB\_ID\_ANALYSIS: true}. In normal use, \texttt{run\_pipeline.py} creates a temporary configuration, sets the expected robot count, and launches this step. For a direct run, first create a copy of the tracking configuration and enable RGB-ID analysis in that copy:
+
+\begin{codeblock}
+cp config/default.yaml config/rgb_id_experiment.yaml
+\end{codeblock}
+
+Then set \texttt{RGB\_ID\_ANALYSIS: true} and the correct \texttt{N\_POGO} in \texttt{config/rgb\_id\_experiment.yaml}, and run:
 
 \begin{codeblock}
 python -m main \\
@@ -303,13 +343,46 @@ python -m main \\
   --config config/rgb_id_experiment.yaml
 \end{codeblock}
 
-The RGB-ID CSV contains:
+The RGB-ID implementation writes \texttt{RGB\_ID.csv} in the directory containing the requested output path. It contains:
 
 \begin{center}
 \texttt{frame, time, id, x, y, theta, led\_x, led\_y, R, G, B}
 \end{center}
 
-The RGB values are aggregated over the LED-flashing windows and decoded into ternary symbols during postprocessing.
+The RGB values are measured around the estimated LED position. They are decoded into ternary symbols during the merging stage. RGB-ID processing is intentionally single-worker: the flashing sequence and the common robot pose must remain synchronised.
+
+\subsection{Decoding IDs and merging controller data}
+
+The merge script combines the dynamics CSV, the RGB-ID CSV, the RGB-ID calibration output, and the Feather file. It requires the delay between the dynamics and RGB-ID recordings in seconds. The RGB flashing start frame can be detected automatically when \texttt{--start-rgb-frame} is omitted.
+
+For a manual merge, use a measured delay in place of \texttt{<seconds\_difference>}:
+
+\begin{codeblock}
+python postprocessing/process_id_trits.py \\
+  --rgb-id-path results/18-09-26/alpha10-4_T100_v2/RGB_ID.csv \\
+  --probe-path data/18-09-26/alpha10-4_T100_v2.feather \\
+  --dyn-path results/18-09-26/alpha10-4_T100_v2/alpha10-4_T100_v2.csv \\
+  --seconds-difference <seconds_difference> \\
+  --expected-n-robots 64 \\
+  --results results/18-09-26/alpha10-4_T100_v2/merged_alpha10-4_T100_v2.csv
+\end{codeblock}
+
+The script saves an intermediate \texttt{score\_calib\_pose\_id.csv} next to \texttt{RGB\_ID.csv} and writes the final merged dataset to the path given by \texttt{--results}. The config-driven workflow can estimate \texttt{seconds\_difference} automatically and is therefore recommended for routine processing.
+
+\subsection{Generating summary slides}
+
+Once the merged CSV exists, the slide generator can be run directly:
+
+\begin{codeblock}
+python postprocessing/experiment_slides_generator.py \\
+  --csv results/18-09-26/alpha10-4_T100_v2/merged_alpha10-4_T100_v2.csv \\
+  --video data/18-09-26/alpha10-4_T100_v2.mp4 \\
+  --controller tanh \\
+  --experiment-id alpha10-4_T100_v2 \\
+  --output results/18-09-26/alpha10-4_T100_v2/alpha10-4_T100_v2
+\end{codeblock}
+
+This produces a PNG and a PDF with the same output base name. Optional plotting parameters, such as the light threshold, communication time, snapshot times, and controller parameters, can be added as command-line options. The available options are also exposed through the \texttt{slides.options} section of \texttt{postprocessing/pipeline.yaml}.
 
 \section{Important configuration parameters}
 
@@ -342,9 +415,9 @@ The main tracking settings are in \texttt{config/default.yaml}. The parameters b
 \end{tabularx}
 \endgroup
 
-In practice, start with the arena geometry, robot count, foreground thresholds, phototaxis thresholds, and calibration values. Change these in YAML rather than editing the detection code.
+In practice, start with the arena geometry, robot count, foreground thresholds, phototaxis thresholds, and calibration values. Change these in YAML rather than editing the detection code. The postprocessing pipeline creates a temporary copy of the tracking configuration for each experiment and overwrites \texttt{N\_POGO} and \texttt{RGB\_ID\_ANALYSIS} there, so the shared default file is not modified.
 
-\warning{If the number of robots is fixed for an experiment, set \texttt{N\_POGO} to that number. The detector uses it when checking and recovering incomplete frames.}
+\warning{It is assumed that the number of robots is fixed for an experiment. The detector uses the {N\_POGO} parameter when checking and recovering incomplete frames.}
 
 \section{Relevant modules and classes}
 
@@ -369,11 +442,12 @@ The standard path subtracts the background, applies the arena mask, detects robo
   \item \texttt{postprocessing/batch\_analysis\_tmux.sh}: optional interactive tmux launcher for independent experiment workers.
 \end{itemize}
 
-\section{Config-driven postprocessing}
+\section{Run all analysis all at once}
+\label{sec:config-workflow}
 
 \subsection{Configure an experiment}
 
-Edit \texttt{postprocessing/pipeline.yaml} before starting a new analysis. An entry gives the date folder, normal video, robot count, and any file-name overrides:
+Edit \texttt{postprocessing/pipeline.yaml} before starting a new analysis. An entry gives the date folder, dynamics video, robot count, optional per-video worker count, and any file-name overrides:
 
 \begin{codeblock}
 experiments:
@@ -381,6 +455,7 @@ experiments:
     date: 18-09-26
     video: alpha10-4_T100_v2.mp4
     n_robots: 64
+    workers: 2
     probe_file: alpha10-4_T100_v2.feather
     outputs:
       normal: "{id}.csv"
@@ -395,7 +470,16 @@ experiments:
       controller: tanh
 \end{codeblock}
 
-With \texttt{auto}, the merge step checks the first ten seconds of the standard CSV for the first sustained population movement. It also searches the RGB-ID CSV for the LED onset. Replace either value with an integer if the automatic estimate is not suitable for a particular experiment.
+With \texttt{auto}, the merge step analyses the configured initial interval of the dynamics CSV for the first sustained population movement. It also searches the RGB-ID CSV for the LED onset. Replace either value with a numeric value if the automatic estimate is not suitable for a particular experiment. The optional \texttt{merge.auto} block controls the motion-detection thresholds.
+
+The two worker settings have different meanings:
+
+\begin{itemize}
+  \item \texttt{workers} belongs to one experiment and controls how many processes analyse its dynamics video. \texttt{workers: 1} keeps the sequential implementation; \texttt{workers: 2} splits one video into two chunks.
+  \item \texttt{batch.max\_workers} is global and controls how many experiments are launched concurrently by \texttt{run\_pipeline.py}.
+\end{itemize}
+
+Their product is a useful upper bound on the number of video-processing workers. For example, \texttt{batch.max\_workers: 2} and \texttt{workers: 2} may use up to four dynamics workers at once. Start conservatively, especially on a laptop, and increase the values only after benchmarking.
 
 \subsection{Run all stages}
 
@@ -412,13 +496,33 @@ The script runs the stages in this order:
   \item PNG and PDF slide generation.
 \end{enumerate}
 
-Different experiments run concurrently as independent subprocesses. Set the number of concurrent tracking processes with \texttt{batch.max\_workers}. A temporary tracking configuration is created for each experiment, so \texttt{config/default.yaml} is left unchanged.
+Different experiments run concurrently as independent subprocesses according to \texttt{batch.max\_workers}. Within each experiment, the dynamics video can additionally use its own \texttt{workers} value. A temporary tracking configuration is created for each experiment, so \texttt{config/default.yaml} is left unchanged.
+
+For a first complete test, it is sensible to use one experiment and conservative settings:
+
+\begin{codeblock}
+batch:
+  enabled: true
+  max_workers: 1
+
+experiments:
+  - id: alpha10-4_T100_v2
+    date: 18-09-26
+    video: alpha10-4_T100_v2.mp4
+    n_robots: 64
+    workers: 2
+\end{codeblock}
+
+Once this completes successfully, additional experiments can be enabled and \texttt{batch.max\_workers} can be increased.
 
 \subsection{Run one stage or one experiment}
 
 \begin{codeblock}
-# Tracking only
+# Standard and RGB-ID tracking only
 python postprocessing/run_pipeline.py --stage batch
+
+# RGB-ID tracking only (standard tracking CSV must already exist)
+python postprocessing/run_pipeline.py --stage rgb
 
 # Merge existing tracking outputs
 python postprocessing/run_pipeline.py --stage merge
@@ -435,15 +539,18 @@ python postprocessing/run_pipeline.py \\
 python postprocessing/run_pipeline.py --dry-run
 \end{codeblock}
 
+The \texttt{--stage batch} command runs standard dynamics tracking followed by RGB-ID tracking. It does not perform merging or slide generation. The \texttt{--stage rgb} command is useful when the dynamics CSV already exists and only the RGB-ID video needs to be reprocessed.
+
 The output for one experiment is stored under:
 
 \begin{codeblock}
 results/<date>/<experiment>/
-+-- <experiment>.csv
++-- <experiment>.csv                  # dynamics tracking output
 +-- RGB_ID.csv
-+-- merged_<experiment>.csv
-+-- <experiment>.png
-+-- <experiment>.pdf
++-- score_calib_pose_id.csv          # RGB-ID decoding intermediate
++-- merged_<experiment>.csv          # final merged dataset
++-- <experiment>.png                 # summary figure
++-- <experiment>.pdf                 # summary figure
 +-- tracking.log
 +-- rgb_tracking.log
 +-- merge.log
@@ -458,7 +565,7 @@ The merged dataset contains the main quantities used for swarm analysis:
 \texttt{t, x, y, theta, q, w, id}
 \end{center}
 
-Here \texttt{t} is time after the detected offset, \texttt{x} and \texttt{y} are robot coordinates, \texttt{theta} is orientation, \texttt{q} and \texttt{w} are controller variables from the Feather file, and \texttt{id} is the decoded robot identifier.
+Here \texttt{t} is time after the detected offset, \texttt{x} and \texttt{y} are robot coordinates, \texttt{theta} is orientation, \texttt{q} and \texttt{w} are controller variables from the Feather file, and \texttt{id} is the decoded robot identifier. The exact time origin depends on the delay supplied to the merge step.
 
 The slide generator includes:
 \begin{itemize}
@@ -485,18 +592,21 @@ If an analysis fails or the result looks wrong, check the following:
 
 \begin{enumerate}
   \item Confirm that the active interpreter is the project virtual environment and Python is at least 3.11.
-  \item Confirm that the normal video, \texttt{id\_} RGB video, background image, and Feather file belong to the same experiment.
+  \item Confirm that the dynamics video, \texttt{id\_} RGB video, background image, and Feather file belong to the same experiment.
   \item Confirm that \texttt{N\_POGO} or \texttt{n\_robots} matches the number of robots actually recorded.
   \item Check arena centre, radius, foreground thresholds, and phototaxis dark/light thresholds.
-  \item Inspect \texttt{tracking.log} and \texttt{rgb\_tracking.log} before changing algorithm code.
+  \item Inspect \texttt{tracking.log}, \texttt{rgb\_tracking.log}, and the terminal output before changing algorithm code.
   \item Run \texttt{--dry-run} to verify all generated paths and commands.
   \item If automatic timing detection is unsuitable for one experiment, replace one or both \texttt{auto} values with manual values in \texttt{pipeline.yaml}.
+  \item If parallel and sequential runs differ near a chunk boundary, increase \texttt{--warmup-frames} for the direct command and compare the resulting trajectories again.
+  \item If the computer becomes unresponsive during a batch run, reduce either \texttt{batch.max\_workers} or the per-experiment \texttt{workers} value.
 \end{enumerate}
 
 \important{Keep the raw input data unchanged. Write generated CSV files, logs, and figures under \texttt{results/}; keep reusable settings in YAML files.}
 
 \section{Final remarks}
 
-Pogotrack is a shared research tool and will continue to change as new experiments are added! If you find a bug or improve the analysis, please open an issue or submit a pull request.
+Pogotrack is a shared research tool and will continue to evolve as new Pogobots experiments are added. If you find a bug or improve the analysis, please open an issue or submit a pull request.
+Hope it helped $:)$
 
 \end{document}

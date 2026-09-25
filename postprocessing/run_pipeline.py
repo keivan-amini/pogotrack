@@ -4,10 +4,10 @@
 Configuration
 -------------
 The workflow is configured by ``postprocessing/pipeline.yaml``. Each entry in
-``experiments`` describes one video, its robot count, merge timing, and slide
-settings. Paths are resolved relative to the repository root. Integer timing
-values can be supplied manually, or set to ``auto`` to detect them from the
-tracking and RGB-ID CSV files.
+``experiments`` describes one video, its robot count, optional dynamics-video
+worker count, merge timing, and slide settings. Paths are resolved relative to
+the repository root. Integer timing values can be supplied manually, or set to
+``auto`` to detect them from the tracking and RGB-ID CSV files.
 
 Modes
 -----
@@ -49,11 +49,12 @@ Examples
     # Print the commands without running them.
     python postprocessing/run_pipeline.py --dry-run
 
-No Python multiprocessing is used inside this orchestration script; batch
-parallelism comes from independent tracking subprocesses controlled by
-``batch.max_workers``. During concurrent tracking, each subprocess receives a
-stable tqdm terminal position and its output is also written to the
-experiment-specific log file.
+Batch parallelism comes from independent tracking subprocesses controlled by
+``batch.max_workers``. Individual dynamics videos can additionally use the
+per-experiment ``workers`` value, which is passed to ``main.py`` as
+``--workers``. RGB-ID tracking remains single-worker. During concurrent
+tracking, each subprocess receives a stable tqdm terminal position and its
+output is also written to the experiment-specific log file.
 """
 
 from __future__ import annotations
@@ -117,6 +118,7 @@ class Experiment:
     date: str
     video: str
     n_robots: int
+    workers: int
     probe_file: str | None
     outputs: dict[str, str]
     merge: dict[str, Any]
@@ -160,12 +162,17 @@ def load_config(config_path: Path) -> tuple[Path, dict[str, Any], list[Experimen
         if n_robots <= 0:
             raise ValueError(f"n_robots must be positive for {identifier}")
 
+        workers = int(raw.get("workers", 1))
+        if workers <= 0:
+            raise ValueError(f"workers must be positive for {identifier}")
+
         experiments.append(
             Experiment(
                 identifier=identifier,
                 date=str(raw["date"]),
                 video=str(raw["video"]),
                 n_robots=n_robots,
+                workers=workers,
                 probe_file=(str(raw["probe_file"]) if raw.get("probe_file") else None),
                 outputs={str(key): str(value) for key, value in (raw.get("outputs") or {}).items()},
                 merge=dict(raw.get("merge") or {}),
@@ -407,6 +414,8 @@ def run_tracking_mode(
             "--config",
             str(tracking_config),
         ]
+        if not rgb_enabled and experiment.workers > 1:
+            command.extend(["--workers", str(experiment.workers)])
         run_command(
             command,
             project_root=project_root,
