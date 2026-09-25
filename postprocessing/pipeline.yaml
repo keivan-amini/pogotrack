@@ -13,14 +13,14 @@ batch:
   max_workers: 4
 
 experiments:
-  - id: alpha10-3_T1000
-    date: 23-09-26
-    video: alpha10-3_T1000.mp4
-    n_robots: 63
+  - id: alpha10-4_T1000
+    date: 24-09-26
+    video: alpha10-4_T1000.mp4
+    n_robots: 64
 
     # The defaults are id.feather, bkg.bmp, and id_<video>.mp4.
     # Set these explicitly only when an experiment uses different names.
-    probe_file: alpha10-3_T1000.feather
+    probe_file: alpha10-4_T1000.feather
 
     outputs:
       normal: "{id}.csv"
@@ -34,7 +34,7 @@ experiments:
       seconds_difference: auto
       start_rgb_frame: auto
       auto:
-        analysis_seconds: 10.0
+        analysis_seconds: 25.0 #change from 10.0
         baseline_seconds: 1.5
         displacement_window_seconds: 0.25
         threshold_k: 6.0
@@ -60,49 +60,50 @@ experiments:
         # delta: 7.5
         # tau_r_max_plot: 100.0
 
-  - id: alpha10-3_T1000_v2
-    date: 23-09-26
-    video: alpha10-3_T1000_v2.mp4
-    n_robots: 61
+  # # EXPERIMENT 2
+  # - id: alpha10-2_T1000
+  #   date: 24-09-26
+  #   video: alpha10-2_T1000.mp4
+  #   n_robots: 60
 
-    # The defaults are id.feather, bkg.bmp, and id_<video>.mp4.
-    # Set these explicitly only when an experiment uses different names.
-    probe_file: alpha10-3_T1000_v2.feather
+  #   # The defaults are id.feather, bkg.bmp, and id_<video>.mp4.
+  #   # Set these explicitly only when an experiment uses different names.
+  #   probe_file: alpha10-2_T1000.feather
 
-    outputs:
-      normal: "{id}.csv"
-      rgb_id: "RGB_ID.csv"
-      merged: "merged_{id}.csv"
-      slides: "{id}"
+  #   outputs:
+  #     normal: "{id}.csv"
+  #     rgb_id: "RGB_ID.csv"
+  #     merged: "merged_{id}.csv"
+  #     slides: "{id}"
 
-    merge:
-      # `auto` detects the first sustained swarm movement and the RGB LED onset.
-      # Integers can be used as manual overrides for either value.
-      seconds_difference: auto
-      start_rgb_frame: auto
-      auto:
-        analysis_seconds: 10.0
-        baseline_seconds: 1.5
-        displacement_window_seconds: 0.25
-        threshold_k: 6.0
-        minimum_displacement: 0.35
-        min_valid_robot_fraction: 0.75
-        min_consecutive_windows: 3
+  #   merge:
+  #     # `auto` detects the first sustained swarm movement and the RGB LED onset.
+  #     # Integers can be used as manual overrides for either value.
+  #     seconds_difference: auto
+  #     start_rgb_frame: auto
+  #     auto:
+  #       analysis_seconds: 10.0
+  #       baseline_seconds: 1.5
+  #       displacement_window_seconds: 0.25
+  #       threshold_k: 6.0
+  #       minimum_displacement: 0.35
+  #       min_valid_robot_fraction: 0.75
+  #       min_consecutive_windows: 3
 
-    slides:
-      enabled: true
-      controller: tanh
-      options:
-        # These values are passed to experiment_slides_generator.py.
-        # Omit an option to use that script's default.
-        light_threshold: 73.5
-        light_region: below
-        comm_time: 300.0
-        t_init_shot: 300.0
-        t_mid_shot: 900.0
-        t_final_shot: 1499.0
+  #   slides:
+  #     enabled: true
+  #     controller: tanh
+  #     options:
+  #       # These values are passed to experiment_slides_generator.py.
+  #       # Omit an option to use that script's default.
+  #       light_threshold: 73.5
+  #       light_region: below
+  #       comm_time: 300.0
+  #       t_init_shot: 300.0
+  #       t_mid_shot: 900.0
+  #       t_final_shot: 1499.0
 
-        # Optional controller-specific overrides:
-        # alpha: 1.0
-        # delta: 7.5
-        # tau_r_max_plot: 100.0
+  #       # Optional controller-specific overrides:
+  #       # alpha: 1.0
+  #       # delta: 7.5
+  #       # tau_r_max_plot: 100.0

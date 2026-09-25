@@ -186,14 +186,28 @@ def detect_experiment_start(
     - require the threshold crossing in most robots
     - detect the first run of min_consecutive_frames above threshold
 
-    If no clear onset is found, fall back to the first frame.
+    If no clear onset is found, raise an error instead of silently using the
+    first frame. A wrong first frame shifts every trit window and can produce
+    plausible-looking but incorrect robot-ID assignments.
     """
     signal_df = build_frame_signal(df)
 
     n_baseline = max(5, int(round(baseline_seconds * fps)))
     n_baseline = min(n_baseline, max(5, len(signal_df) // 4))
 
-    baseline = signal_df.iloc[:n_baseline]["signal"].to_numpy(dtype=float)
+    signal_values = signal_df["signal"].to_numpy(dtype=float)
+    # The RGB sequence can start inside the nominal baseline interval. Using
+    # the first 1.5 s blindly would then mix dark and illuminated frames and
+    # can produce a threshold above every illuminated value. Estimate the
+    # dark-state baseline from the lower quarter of the complete signal,
+    # falling back to the initial interval only for very short/degenerate data.
+    low_state_cutoff = float(np.quantile(signal_values, 0.25))
+    low_state = signal_values[signal_values <= low_state_cutoff]
+    if len(low_state) >= 5:
+        baseline = low_state
+    else:
+        baseline = signal_values[:n_baseline]
+
     base_med = float(np.median(baseline))
     base_mad = float(np.median(np.abs(baseline - base_med)))
     robust_sigma = 1.4826 * base_mad
@@ -226,10 +240,11 @@ def detect_experiment_start(
             break
 
     if start_frame is None:
-        start_frame = int(signal_df["frame"].min())
-        detected = False
-    else:
-        detected = True
+        raise ValueError(
+            "Could not detect the RGB-ID onset automatically. "
+            "Set --start-rgb-frame explicitly after inspecting rgb_id_debug."
+        )
+    detected = True
 
     signal_df = signal_df.copy()
     signal_df["threshold"] = threshold
@@ -723,7 +738,10 @@ def merge_datasets(
     # valid (for example, when the orientation patch contains no thresholded
     # pixels). Keep the x,y trajectory and preserve that theta as NaN.
     dyn.loc[~np.isfinite(dyn["theta"]), "theta"] = np.nan
-    dyn = dyn.dropna(subset=["time", "x", "y", "particle"]).copy()
+    required_dyn_values = ["time", "x", "y", "particle"]
+    valid_geometry = dyn[required_dyn_values].notna().all(axis=1)
+    valid_geometry &= np.isfinite(dyn[required_dyn_values]).all(axis=1)
+    dyn = dyn.loc[valid_geometry].copy()
     dyn["particle"] = dyn["particle"].astype(int)
 
     dyn["t"] = dyn["time"].astype(float) - float(delay_s)
