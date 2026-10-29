@@ -42,6 +42,16 @@ Examples
     python postprocessing/run_pipeline.py --stage merge
     python postprocessing/run_pipeline.py --stage slides
 
+    # Generate the Azadeh four-region slide layout.
+    python postprocessing/run_pipeline.py --stage slides --azadeh
+
+    # Generate the Azadeh binary-policy slide layout.
+    python postprocessing/run_pipeline.py --stage slides --azadeh_binary
+
+    # Select the metric used by the binary y-profile PDF page.
+    python postprocessing/run_pipeline.py --stage slides --azadeh_binary \
+        --azadeh-binary-profile-metric packing_fraction
+
     # Restrict a stage, or the complete workflow, to one experiment.
     python postprocessing/run_pipeline.py --stage merge --experiment alpha10-4_T100_v2
     python postprocessing/run_pipeline.py --experiment alpha10-4_T100_v2
@@ -91,6 +101,7 @@ SLIDE_OPTION_FLAGS = {
     "t_edges": "--t-edges",
     "t_min": "--t-min",
     "t_max": "--t-max",
+    "azadeh_binary_profile_metric": "--azadeh-binary-profile-metric",
     "robust_light_min": "--robust-light-min",
     "robust_light_max": "--robust-light-max",
     "robust_max_runtime": "--robust-max-runtime",
@@ -712,6 +723,9 @@ def run_slides(
     *,
     dry_run: bool,
     progress_position: int | None = None,
+    azadeh: bool = False,
+    azadeh_binary: bool = False,
+    azadeh_binary_profile_metric: str | None = None,
 ) -> None:
     paths = get_paths(project_root, config, experiment)
     if not paths["merged_output"].is_file() and not dry_run:
@@ -737,6 +751,14 @@ def run_slides(
         "--output",
         str(paths["slides_output"]),
     ]
+    if azadeh:
+        command.append("--azadeh")
+    if azadeh_binary:
+        command.append("--azadeh_binary")
+    if azadeh_binary_profile_metric is not None:
+        command.extend(
+            ["--azadeh-binary-profile-metric", azadeh_binary_profile_metric]
+        )
 
     options = slides.get("options") or {}
     for key, value in options.items():
@@ -769,6 +791,9 @@ def run_stage(
     *,
     max_workers: int,
     dry_run: bool,
+    azadeh: bool = False,
+    azadeh_binary: bool = False,
+    azadeh_binary_profile_metric: str | None = None,
 ) -> None:
     if stage == "batch":
         function = run_tracking
@@ -781,6 +806,27 @@ def run_stage(
     else:
         raise ValueError(f"Unknown stage: {stage}")
 
+    stage_options = (
+        {
+            "azadeh": azadeh,
+            "azadeh_binary": azadeh_binary,
+            "azadeh_binary_profile_metric": azadeh_binary_profile_metric,
+        }
+        if stage == "slides"
+        else {}
+    )
+
+    # A batch experiment can own more than one tqdm row because its normal
+    # tracking command may start several video workers. Reserve a contiguous
+    # block for each experiment so the next experiment never reuses one of
+    # those rows. RGB-ID, merge, and slide commands each use one row.
+    progress_positions: dict[str, int] = {}
+    next_progress_position = 0
+    for experiment in experiments:
+        progress_positions[experiment.identifier] = next_progress_position
+        rows = max(1, experiment.workers) if stage == "batch" else 1
+        next_progress_position += rows
+
     if dry_run or max_workers <= 1 or len(experiments) <= 1:
         for experiment in experiments:
             print(f"\n[{stage}] {experiment.identifier}")
@@ -790,7 +836,8 @@ def run_stage(
                 config,
                 experiment,
                 dry_run=dry_run,
-                progress_position=0,
+                progress_position=progress_positions[experiment.identifier],
+                **stage_options,
             )
         return
 
@@ -804,9 +851,10 @@ def run_stage(
                 config,
                 experiment,
                 dry_run=False,
-                progress_position=index,
+                progress_position=progress_positions[experiment.identifier],
+                **stage_options,
             ): experiment
-            for index, experiment in enumerate(experiments)
+            for experiment in experiments
         }
         for future in as_completed(futures):
             experiment = futures[future]
@@ -841,6 +889,24 @@ def parse_args() -> argparse.Namespace:
         "--experiment",
         action="append",
         help="Run only this experiment id; may be supplied more than once",
+    )
+    azadeh_layout = parser.add_mutually_exclusive_group()
+    azadeh_layout.add_argument(
+        "--azadeh",
+        action="store_true",
+        help="Use the Azadeh four-region layout when generating slides",
+    )
+    azadeh_layout.add_argument(
+        "--azadeh_binary",
+        action="store_true",
+        help="Use the Azadeh binary-policy layout when generating slides",
+    )
+    parser.add_argument(
+        "--azadeh-binary-profile-metric",
+        "--azadeh_binary_profile_metric",
+        choices=["density", "packing_fraction"],
+        default=None,
+        help="Metric for the Azadeh binary y-profile page",
     )
     parser.add_argument("--dry-run", action="store_true", help="Print commands without running them")
     return parser.parse_args()
@@ -881,6 +947,9 @@ def main() -> None:
             experiments,
             max_workers=max_workers if stage in {"batch", "rgb"} else 1,
             dry_run=args.dry_run,
+            azadeh=args.azadeh,
+            azadeh_binary=args.azadeh_binary,
+            azadeh_binary_profile_metric=args.azadeh_binary_profile_metric,
         )
 
 

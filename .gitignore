@@ -8,6 +8,16 @@
 !postprocessing/*.sh
 !postprocessing/*.py
 !postprocessing/*.yaml
+!azadeh/
+!azadeh/*.c
+!azadeh/*.md
+
+# Keep the configurable aggregate-analysis code, while continuing to ignore
+# the large raw result files under results/.
+!results/
+!results/aggregate_tanh/
+!results/aggregate_tanh/*.py
+!results/aggregate_tanh/*.yaml
 
 # Keep only these two documentation files
 !doc/
@@ -18,3 +28,4 @@ doc/*
 !requirements.txt
 !README.md
 !main.py
+!tutorial_template.tex

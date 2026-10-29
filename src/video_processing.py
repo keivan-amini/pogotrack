@@ -124,13 +124,17 @@ def _process_video_chunk_worker(job):
         save_path=save_path,
         config_path=config_path,
     )
+    # The pipeline may reserve several terminal rows for each experiment.
+    # The environment value is the experiment's base row; each chunk worker
+    # gets its own row below that base.
+    base_position = _tqdm_position()
     detections = processor.process(
         frame_start=frame_start,
         frame_end=frame_end,
         warmup_start=warmup_start,
         finalize=False,
         show_progress=True,
-        progress_position=worker_index,
+        progress_position=base_position + worker_index,
         progress_desc=f"Worker {worker_index + 1}/{worker_count}",
     )
     detections.to_csv(save_path, index=False)
@@ -1343,7 +1347,7 @@ class VideoProcessor:
         warmup_start=None,
         finalize=True,
         show_progress=True,
-        progress_position=0,
+        progress_position=None,
         progress_desc=None,
     ):
         """
@@ -1377,8 +1381,10 @@ class VideoProcessor:
             background_masked = cv2.bitwise_and(background_blue, background_blue, mask=mask)
 
         invalid_theta_rows = 0
-        progress_position = _tqdm_position(progress_position)
-        progress_desc = _tqdm_description(progress_desc or "Processing video")
+        if progress_position is None:
+            progress_position = _tqdm_position()
+        if progress_desc is None:
+            progress_desc = _tqdm_description("Processing video")
 
         with tqdm(
             total=frame_end - frame_start,

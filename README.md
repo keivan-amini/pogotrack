@@ -189,6 +189,19 @@ If the paths are correct, run all stages:
 python postprocessing/run_pipeline.py
 ```
 
+For a launch that configures the project virtual environment and the macOS
+runtime variables automatically, use the bundled wrapper:
+
+```bash
+./postprocessing/run_pipeline.sh \
+  --azadeh_binary \
+  --azadeh-binary-profile-metric density \
+  --stage slides
+```
+
+The wrapper uses `.venv/bin/python`, sets `DYLD_LIBRARY_PATH`, and creates the
+Matplotlib cache directory before starting the pipeline.
+
 The stages run in this order:
 
 1. standard dynamics tracking;
